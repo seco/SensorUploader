@@ -52,29 +52,23 @@ bool readConfigurationFromSerial()
             //root.printTo(Serial);
 
             if (root.containsKey("ssid"))
-                strncpy((char *)(const char *)root["ssid"], &config.ssid[0], 33);
-            Serial.println(1);
+                strncpy(&config.ssid[0],(const char *)root["ssid"], 33);
             
             if (root.containsKey("password"))
-                strncpy((char *)(const char *)root["password"], &config.password[0], 65);
-            Serial.println(2);
+                strncpy(&config.password[0], (const char *)root["password"], 65);
             
             if (root.containsKey("localhost"))
-                strncpy((char *)(const char *)root["localhost"], &config.localhost[0], 129);
-            Serial.println(3);
-
+                strncpy(&config.localhost[0], (const char *)root["localhost"], 129);
             
             if (root.containsKey("mserver"))              
-                strncpy((char *)(const char *)root["mserver"], &config.mserver[0], 129);
+                strncpy(&config.mserver[0], (const char *)root["mserver"], 129);
 
-         Serial.println(4);
             if (root.containsKey("mpassword"))             
-                strncpy((char *)(const char *)root["mpassword"], &config.mpassword[0], 65);
-                     Serial.println(5);
+                strncpy(&config.mpassword[0], (const char *)root["mpassword"], 65);
+
             if (root.containsKey("muser"))
-                strncpy((char *)(const char *)root["muser"], &config.muser[0], 65);
-         Serial.println(5);
-            
+                strncpy(&config.muser[0], (const char *)root["muser"], 65);
+
             if (root.containsKey("mport")) {
                 int port = root["mport"].as<int>();
 
@@ -83,11 +77,11 @@ bool readConfigurationFromSerial()
 
                  config.mport = port;
             }
-                 Serial.println(6);
+
             SPIFFS.remove("/config.bin");
             
             delay(10);
-                     Serial.println(7);
+
             File configFile = SPIFFS.open("/config.bin", "w");
 
             
@@ -146,7 +140,7 @@ void setup() {
         }
     } else {
         size_t size = configFile.size();
-        configFile.readBytes((char *)&config, sizeof(Config));            
+        configFile.readBytes((char *)&config, size);            
         configFile.close();
     }
 
@@ -171,9 +165,9 @@ void setup() {
 
     Serial.print("Connecting to ");
     Serial.print(config.ssid);
-    Serial.print(":");
-    Serial.print(config.password);
-    Serial.print(" ");
+    //Serial.print(":");
+    //Serial.print(config.password);
+    //Serial.print(" ");
 
     
     while (WiFi.status() != WL_CONNECTED)
@@ -196,6 +190,12 @@ void setup() {
 }
 
 void loop() {
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("Disconnected!");
+        delay(30000);
+        systemRestart();
+    }
+
     StaticJsonBuffer<200> jsonBuffer;
     JsonObject& json = jsonBuffer.createObject();
     short cnt = 10;
@@ -208,7 +208,25 @@ void loop() {
          delay(1000);
     }
 
+    if (strlen(config.mserver)){
+        
+    } else {
+        json.printTo(Serial);
+        Serial.printLn();
+    }
     
-    json.printTo(Serial);
+    
     delay(500);
+
+    for (int i=0;i<10;i++)
+    {
+        delay(1000);
+
+        if (readConfigurationFromSerial())
+        {
+            Serial.println("Resetting to update configuration");
+            systemRestart();
+        }
+    }
+
 }
