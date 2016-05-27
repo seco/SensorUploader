@@ -1,0 +1,267 @@
+#include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
+#include <ESP8266mDNS.h>
+#include <ArduinoJson.h>
+#include <FS.h>
+
+#include "SensorChainedAdapterBase.h"
+#include "DHTAdapter.h"
+#include "BMPAdapter.h"
+#include "TimeSyncronizer.h"
+
+
+
+
+#define DHTPIN 2     // what pin we're connected to
+#define SDAPIN 12     // what pin we're connected to
+#define SCLPIN 14     // what pin we're connected to
+
+// Uncomment whatever type you're using!
+#define DHTTYPE DHT22   // DHT 22  (AM2302)
+
+SensorChainedAdapterBase* adapterChain;
+
+
+WiFiClientSecure client;
+
+
+bool readConfigurationFromSerial()
+{
+    std::unique_ptr<char[]> buf(new char[1024+1]);
+    char* pbuf = buf.get();
+    
+    int buflen = 0; 
+    while(Serial.available() > 0) {
+        char t = Serial.read();
+        
+        if (t == '\r' || t == '\n')
+        {
+            *pbuf++ = 0;
+          
+            StaticJsonBuffer<1000> jsonBuffer;
+            JsonObject& root = jsonBuffer.parseObject(pbufc);            
+
+            if (!root.success())
+                return false;
+
+            File configFile = SPIFFS.open("/config.json", "r");
+            
+            if (configFile) {
+                  memset((void *)pbufc, 1025, 0);
+                  configFile.readBytes(pbufc, 1024);            
+                  configFile.close();
+              
+                  StaticJsonBuffer<1000> jsonBuffer2;
+                  JsonObject& json2 = jsonBuffer2.parseObject(buf.get());
+                  
+                  if (!(const char *)root["ssid"])
+                      root["ssid"] = (const char *)json2["ssid"];
+                  
+                  if (!(const char *)root["password"])
+                      root["password"] =(const char *)json2["password"];
+      
+                  if (!(const char *)root["localhost"])
+                      root["localhost"] = (const char *)json2["localhost"];
+                  
+                  if (!(const char *)root["fingerprint"])
+                      root["fingerprint"] = (const char *)json2["fingerprint"];
+      
+                  if (!(const char *)root["host"])
+                      root["host"] = (const char *)json2["host"];
+      
+                  if (!(const char *)root["pathq"])
+                      root["pathq"] = (const char *)json2["pathq"];
+            }
+        
+          
+            
+            delay(1);
+            
+            
+            SPIFFS.remove("/config.json");
+            
+            delay(1);
+            
+            configFile = SPIFFS.open("/config.json", "w");
+
+            
+            
+            if (!configFile) {
+                Serial.println("Failed to open config file for writing");
+                return false;
+            }
+
+            
+            root.printTo(configFile);
+
+            root.printTo(Serial);
+            
+            configFile.close();
+            
+            return true;
+        }
+        else 
+        {
+            *pbuf++ = t;
+    
+            delay(1);
+            
+            if (buflen++ >= 1024)
+                return false;
+        }
+    }
+
+    return false;
+}
+
+void systemRestart() {
+    delay(50);
+    pinMode(13, OUTPUT); 
+    digitalWrite(13, LOW); 
+}
+
+void setup() {
+    Serial.begin(115200);
+
+    SPIFFS.begin();
+
+    delay(100);
+
+    File configFile = SPIFFS.open("/config.json", "r");
+    
+    if (!configFile) {
+        Serial.println("Waiting for configuration (no file)");
+        while (true) {
+            if (readConfigurationFromSerial())
+            {
+                Serial.println("Resetting to update configuration");
+                systemRestart();
+            }
+            delay(100);
+        }
+    }
+
+    size_t size = configFile.size();
+    std::unique_ptr<char[]> buf(new char[size]);
+    configFile.readBytes(buf.get(), size);            
+    configFile.close();
+
+    StaticJsonBuffer<1000> jsonBuffer2;
+    JsonObject& json2 = jsonBuffer2.parseObject(buf.get());
+
+    if (!json2.success() || !(const char *)json2["ssid"] || !(const char *)json2["password"] || !(const char *)json2["localhost"])
+    {
+        if (!json2.success())
+        {
+            Serial.println("Waiting for configuration (wrong data)");
+            
+            SPIFFS.remove("/config.json");
+        }
+        else
+            Serial.println("Waiting for configuration (no data)");
+            
+        while (true) {
+            if (readConfigurationFromSerial())
+            {
+                Serial.println("Resetting to update configuration");
+                systemRestart();
+            }
+            delay(100);
+        }
+    }
+/*
+    if (!(const char *)json2["fingerprint"])
+        json2["fingerprint"] = String("7a54069bdc7a25b3868d6653482c0b9642c7b30a");
+
+    if (!(const char *)json2["host"])
+        json2["host"] = String("sweltering-inferno-5231.firebaseio.com");
+   
+    if (!(const char *)json2["pathq"])
+        json2["pathq"] =  String("/weatherPoints/{key1}/{key2}.json?auth=rCKGA2zWOK6OCntHS9xS7NVh4agXaeMFSr4rQt5K"); 
+
+
+    fingerprint = (const char *)json2["fingerprint"];
+    host = (const char *)json2["host"];
+    pathq = (const char *)json2["pathq"];
+*/
+    
+
+    adapterChain = new DHTAdapter(DHTPIN, DHTTYPE, "1");
+
+    adapterChain->next(new BMPAdapter(SDAPIN, SCLPIN, "2"));
+
+    int cnt = 10;
+    
+    while (cnt-- > 0 && !adapterChain->beginAll()) {
+        Serial.println("Could not find a valid sensor, check wiring!");
+
+        if (cnt == 0)
+            systemRestart();
+            
+         delay(1000);
+    }
+    
+    WiFi.begin((const char *)json2["ssid"], (const char *)json2["password"]);
+    WiFi.hostname((const char *)json2["localhost"]);
+
+    Serial.print("Connecting to ");
+    Serial.print((const char *)json2["ssid"]);
+    Serial.print(":");
+    Serial.print((const char *)json2["password"]);
+    Serial.print(" ");
+
+    
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        if (readConfigurationFromSerial())
+        {
+            Serial.println("Resetting to update configuration");
+            systemRestart();
+        }
+        
+        Serial.print(".");
+        delay(1000);
+    }
+
+    Serial.println();
+
+    if (!MDNS.begin((const char *)json2["localhost"]))
+        Serial.println("Error setting up MDNS responder!");
+}
+
+void loop() {
+    if (WiFi.status() != WL_CONNECTED) {
+       Serial.println("Disconnected!");
+       delay(30000);
+       systemRestart();
+    }
+    
+    StaticJsonBuffer<200> jsonBuffer;
+    JsonObject& json = jsonBuffer.createObject();
+
+    int cnt = 10;
+    
+    while (cnt-- > 0 && !adapterChain->saveAll(&json)) {
+        Serial.println("Could not find a valid sensor, check wiring!");
+
+        if (cnt == 0)
+            systemRestart();
+            
+         delay(1000);
+    }
+
+    delay(500);
+
+    //sendData(Time.acquire(), &json);
+
+    for (int i=0;i<10;i++)
+    {
+        delay(1000);
+
+        if (readConfigurationFromSerial())
+        {
+            Serial.println("Resetting to update configuration");
+            systemRestart();
+        }
+    }
+}
