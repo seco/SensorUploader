@@ -1,6 +1,7 @@
 #include <ESP8266WiFi.h>
-#include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 #include <ESP8266mDNS.h>
+#include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <FS.h>
 
@@ -23,7 +24,10 @@
 SensorChainedAdapterBase* adapterChain;
 
 
-WiFiClientSecure client;
+WiFiClient wclient;
+PubSubClient client(wclient);
+
+
 Config config;
 
 bool readConfigurationFromSerial()
@@ -113,6 +117,17 @@ bool readConfigurationFromSerial()
 }
 
 
+void callback(char* topic, byte* payload, unsigned int length) {
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print("] ");
+    for (int i = 0; i < length; i++) {
+        Serial.print((char)payload[i]);
+    }
+    Serial.println();
+}
+
+
 void systemRestart() {
     delay(50);
     pinMode(13, OUTPUT); 
@@ -187,7 +202,18 @@ void setup() {
     if (!MDNS.begin(config.localhost))
         Serial.println("Error setting up MDNS responder!");
 
+
+    if (strlen(config.mserver)){
+        if (config.mport == 0)
+            config.mport = 1883;
+
+        client.setServer(config.mserver, config.mport);
+
+        client.setCallback(callback);
+    } 
 }
+
+
 
 void loop() {
     if (WiFi.status() != WL_CONNECTED) {
@@ -196,6 +222,7 @@ void loop() {
         systemRestart();
     }
 
+   
     StaticJsonBuffer<200> jsonBuffer;
     JsonObject& json = jsonBuffer.createObject();
     short cnt = 10;
@@ -208,19 +235,24 @@ void loop() {
          delay(1000);
     }
 
-    if (strlen(config.mserver)){
-        
+    if (strlen(config.mserver) && (client.connected() || client.connect(config.localhost, config.mpassword, config.mpassword))) {
+
+        char buffer[json.measureLength() + 1];
+        json.printTo(buffer, sizeof(buffer));
+        client.publish((String(config.localhost) + "/data").c_str(), buffer);
+    
     } else {
         json.printTo(Serial);
-        Serial.printLn();
+        Serial.println();
     }
-    
-    
-    delay(500);
 
-    for (int i=0;i<10;i++)
+        
+    for (int i=0;i<100;i++)
     {
-        delay(1000);
+        if (client.connected())
+          client.loop();
+        
+        delay(100);
 
         if (readConfigurationFromSerial())
         {
