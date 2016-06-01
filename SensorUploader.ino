@@ -23,6 +23,7 @@
 
 SensorChainedAdapterBase* adapterChain;
 
+unsigned long volatile time1;
 
 WiFiClient wclient;
 PubSubClient client(wclient);
@@ -73,6 +74,12 @@ bool readConfigurationFromSerial()
             if (root.containsKey("muser"))
                 strncpy(&config.muser[0], (const char *)root["muser"], 65);
 
+            if (root.containsKey("mprefix"))              
+                strncpy(&config.mprefix[0], (const char *)root["mprefix"], 129);
+
+            if (root.containsKey("mnjson"))
+                config.mnjson = root["mnjson"].as<bool>();
+
             if (root.containsKey("mport")) {
                 int port = root["mport"].as<int>();
 
@@ -80,6 +87,15 @@ bool readConfigurationFromSerial()
                     port = 1883;
 
                  config.mport = port;
+            }
+
+             if (root.containsKey("minterval")) {
+                int interval = root["minterval"].as<int>();
+
+                if (interval <= 0 || interval >= 3600 * 1000)
+                    interval = 10000;
+
+                 config.minterval = interval;
             }
 
             SPIFFS.remove("/config.bin");
@@ -154,7 +170,7 @@ void setup() {
             delay(100);
         }
     } else {
-        size_t size = configFile.size();
+        size_t size = std::min(configFile.size(), sizeof(Config));
         configFile.readBytes((char *)&config, size);            
         configFile.close();
     }
@@ -207,12 +223,16 @@ void setup() {
         if (config.mport == 0)
             config.mport = 1883;
 
+        if (config.minterval == 0)
+            config.minterval = 10000;
+
         client.setServer(config.mserver, config.mport);
 
         client.setCallback(callback);
     } 
-}
 
+    time1 = millis();
+}
 
 
 void loop() {
@@ -222,43 +242,52 @@ void loop() {
         systemRestart();
     }
 
-   
-    StaticJsonBuffer<200> jsonBuffer;
-    JsonObject& json = jsonBuffer.createObject();
-    short cnt = 10;
-    while (cnt-- > 0 && !adapterChain->saveAll(&json)) {
-        Serial.println("Could not find a valid sensor, check wiring!");
+    unsigned long time2 = millis();
 
-        if (cnt == 0)
-            systemRestart();
-            
-         delay(1000);
-    }
-
-    if (strlen(config.mserver) && (client.connected() || client.connect(config.localhost, config.mpassword, config.mpassword))) {
-
-        char buffer[json.measureLength() + 1];
-        json.printTo(buffer, sizeof(buffer));
-        client.publish((String(config.localhost) + "/data").c_str(), buffer);
-    
-    } else {
-        json.printTo(Serial);
-        Serial.println();
-    }
-
-        
-    for (int i=0;i<100;i++)
+    if (time2 < time1)
     {
-        if (client.connected())
-          client.loop();
-        
-        delay(100);
+        time1 = time2;
+        return;
+    }
 
-        if (readConfigurationFromSerial())
-        {
-            Serial.println("Resetting to update configuration");
-            systemRestart();
+    if (time2 - time1 > config.minterval) {
+        
+        time1  = time2;
+        
+        StaticJsonBuffer<200> jsonBuffer;
+        JsonObject& json = jsonBuffer.createObject();
+        adapterChain->saveAll(&json);
+    
+      
+        
+        if (strlen(config.mserver) && (client.connected() || client.connect(config.localhost, config.mpassword, config.mpassword))) {
+            String prefix = String(config.mprefix[0] == 0 ? config.localhost : config.mprefix);
+            
+            if (config.mnjson) {
+                for (JsonObject::iterator it=json.begin(); it!=json.end(); ++it)  {
+                    client.publish((prefix + "/" + it->key).c_str(), it->value.asString());
+                }
+            } else {
+                char buffer[json.measureLength() + 1];
+                json.printTo(buffer, sizeof(buffer));
+                client.publish((prefix + "/data").c_str(), buffer);
+            }
+        
+        } else {
+            json.printTo(Serial);
+            Serial.println();
         }
     }
+        
 
+    if (client.connected())
+      client.loop();
+    
+    delay(100);
+
+    if (readConfigurationFromSerial())
+    {
+        Serial.println("Resetting to update configuration");
+        systemRestart();
+    }
 }

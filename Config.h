@@ -11,7 +11,11 @@ typedef struct Config
     char mpassword[65];
     char muser[65];
     unsigned short mport;
+    
+    char mprefix[129];
 
+    bool mnjson;
+    unsigned int minterval;
 } Config_t;
 
 
