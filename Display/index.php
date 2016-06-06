@@ -7,7 +7,7 @@
 		<script src="//code.highcharts.com/highcharts.js"></script>
 	</head>
 <body>
-	<div id="container" style="width:1000px; height:600px;"></div>
+	<div id="container" style="width:1000px; height:600px;margin: 0 auto;"></div>
 
 <script type="text/javascript">		
 <?php
