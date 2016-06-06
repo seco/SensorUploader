@@ -80,12 +80,16 @@ var data = <?=(json_encode($data)); ?>;
 var xdata = [];
 
 for(var k in data) {
+	data[k].reverse();
 	xdata.push({
             name: k,
             data: data[k]
         });
+	
 }
 
+var categories = <?=(json_encode($categories)); ?>;
+categories.reverse();
 
 $(function () { 
     $('#container').highcharts({
@@ -96,7 +100,7 @@ $(function () {
             text: 'Weather'
         },
         xAxis: {
-            categories: <?=(json_encode($categories)); ?>
+            categories: categories
         },
         yAxis: {
         },
