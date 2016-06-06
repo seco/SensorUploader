@@ -8,8 +8,8 @@ typedef struct Config
     char localhost[129];
 
     char mserver[129];
-    char mpassword[65];
     char muser[65];
+    char mpassword[65];
     unsigned short mport;
     
     char mprefix[129];

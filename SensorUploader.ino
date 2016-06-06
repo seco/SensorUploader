@@ -257,32 +257,42 @@ void loop() {
         StaticJsonBuffer<200> jsonBuffer;
         JsonObject& json = jsonBuffer.createObject();
         adapterChain->saveAll(&json);
-    
-      
+
         
-        if (strlen(config.mserver) && (client.connected() || client.connect(config.localhost, config.mpassword, config.mpassword))) {
+      
+
+        
+        if (strlen(config.mserver) && (client.connected() || client.connect(config.localhost, config.muser, config.mpassword))) {
             String prefix = String(config.mprefix[0] == 0 ? config.localhost : config.mprefix);
-            
+
             if (config.mnjson) {
                 for (JsonObject::iterator it=json.begin(); it!=json.end(); ++it)  {
-                    client.publish((prefix + "/" + it->key).c_str(), it->value.asString());
+                    client.publish((prefix + "/" + it->key).c_str(), it->value.as<String>().c_str());
+           
+                    Serial.println(prefix + "/" + it->key);
                 }
             } else {
                 char buffer[json.measureLength() + 1];
                 json.printTo(buffer, sizeof(buffer));
                 client.publish((prefix + "/data").c_str(), buffer);
+
+                Serial.println(prefix + "/data");
             }
         
         } else {
             json.printTo(Serial);
-            Serial.println();
+            Serial.println("...");
         }
+
+
     }
         
 
     if (client.connected())
       client.loop();
-    
+
+
+
     delay(100);
 
     if (readConfigurationFromSerial())

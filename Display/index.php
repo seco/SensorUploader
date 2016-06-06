@@ -49,7 +49,6 @@ $data = ['temperature1' => [], 'pressure1' => []];
 
 $categories = [];
 
-$i = 0;
 
 foreach($res as $value) {
 	$xvalue = (array)$value;
@@ -63,9 +62,16 @@ foreach($res as $value) {
 		array_push($data[$key], round($vl * 100) / 100);
 	}
 	
-	array_push($categories, $xkey['y'].'-'.$xkey['m'].'-'.$xkey['d'].' '.$xkey['h']);
+        $date = new DateTime();
+        $date->setDate($xkey['y'], $xkey['m'], $xkey['d']);
+        $date->setTime($xkey['h'], 0, 0);
+        if (date('Z') > 0)
+            $date->add(new DateInterval('PT'.abs(date('Z')).'S'));
+        else
+            $date->sub(new DateInterval('PT'.abs(date('Z')).'S'));
+
+	array_push($categories, $date->format('Y-m-d H:00:00') );
 	
-	$i++;
 }
 ?>
 	
