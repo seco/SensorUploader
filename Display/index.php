@@ -7,7 +7,7 @@
 		<script src="//code.highcharts.com/highcharts.js"></script>
 	</head>
 <body>
-	<div id="container" style="width:800px; height:400px;"></div>
+	<div id="container" style="width:1000px; height:600px;"></div>
 
 <script type="text/javascript">		
 <?php
@@ -78,14 +78,29 @@ foreach($res as $value) {
 var data = <?=(json_encode($data)); ?>;
 
 var xdata = [];
+var ydata = [];
+
 
 for(var k in data) {
 	data[k].reverse();
 	xdata.push({
             name: k,
-            data: data[k]
+            data: data[k],
+            yAxis: ydata.length,
+            type: 'spline'    
         });
-	
+	ydata.push({
+            labels: {
+                style: {
+                    color: Highcharts.getOptions().colors[ydata.length],
+                    'font-weight':'bold'
+                },
+            },
+            title: {
+                text: null
+            }
+        });
+        
 }
 
 var categories = <?=(json_encode($categories)); ?>;
@@ -99,11 +114,13 @@ $(function () {
         title: {
             text: 'Weather'
         },
+        tooltip: {
+            shared: true
+        },
         xAxis: {
             categories: categories
         },
-        yAxis: {
-        },
+        yAxis: ydata,
         series: xdata
     });
 });
