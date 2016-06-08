@@ -7,3 +7,7 @@ My test server is mosquitto + mongodb + nginx + php (to display aggregated data)
 MQTT message can be single json containing all the sensors data or individual messages for each value  (configurable).
 
 Serial port is used to configure parameters - wifi connection credentials, mqtt server name and credentials.
+
+Display - sample script to display data
+
+NodeJSMongoMQTT - sample nodejs script forwarding messages to mongodb collection, and able to forward messages to external web server.
