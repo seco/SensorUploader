@@ -1,5 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <ESP8266mDNS.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -25,8 +26,8 @@ SensorChainedAdapterBase* adapterChain;
 
 unsigned long volatile time1;
 
-WiFiClient wclient;
-PubSubClient client(wclient);
+Client* pwclient;
+PubSubClient client;
 
 
 Config config;
@@ -46,7 +47,7 @@ bool readConfigurationFromSerial()
 
             //Serial.println(bufc);
             
-            StaticJsonBuffer<1024> jsonBuffer;
+            StaticJsonBuffer<2048> jsonBuffer;
             JsonObject& root = jsonBuffer.parseObject(bufc);            
 
             if (!root.success()) {
@@ -97,6 +98,9 @@ bool readConfigurationFromSerial()
 
                  config.minterval = interval;
             }
+
+            if (root.containsKey("mfingerprint"))              
+                strncpy(&config.mfingerprint[0], (const char *)root["mfingerprint"], 129);
 
             SPIFFS.remove("/config.bin");
             
@@ -228,6 +232,9 @@ void setup() {
 
         client.setServer(config.mserver, config.mport);
 
+        pwclient = config.mfingerprint[0] ? new WiFiClientSecure() : new WiFiClient();
+        client.setClient(*pwclient);
+        
         client.setCallback(callback);
     } 
 
@@ -258,30 +265,49 @@ void loop() {
         JsonObject& json = jsonBuffer.createObject();
         adapterChain->saveAll(&json);
 
-        
-      
+        bool connected = false;
+       
+        if (strlen(config.mserver)) {
+            connected = client.connected();
+            
+            if (!connected) {
+                if (client.connect(config.localhost, config.muser, config.mpassword)) {
+                     connected = !config.mfingerprint[0] || ((WiFiClientSecure *)pwclient)->verify( config.mfingerprint, config.mserver);
 
-        
-        if (strlen(config.mserver) && (client.connected() || client.connect(config.localhost, config.muser, config.mpassword))) {
-            String prefix = String(config.mprefix[0] == 0 ? config.localhost : config.mprefix);
-
-            if (config.mnjson) {
-                for (JsonObject::iterator it=json.begin(); it!=json.end(); ++it)  {
-                    client.publish((prefix + "/" + it->key).c_str(), it->value.as<String>().c_str());
-           
-                    Serial.println(prefix + "/" + it->key);
+                     if (!connected) {
+                         Serial.print("fingerprint doesn't match: ");
+                         Serial.print(config.mfingerprint);
+                         Serial.print(", host: ");
+                         Serial.println(config.mserver);
+                     
+                         client.disconnect();
+                     }
                 }
-            } else {
-                char buffer[json.measureLength() + 1];
-                json.printTo(buffer, sizeof(buffer));
-                client.publish((prefix + "/data").c_str(), buffer);
+            }
 
-                Serial.println(prefix + "/data");
+
+            if (connected) {
+                String prefix = String(config.mprefix[0] == 0 ? config.localhost : config.mprefix);
+    
+                if (config.mnjson) {
+                    for (JsonObject::iterator it=json.begin(); it!=json.end(); ++it)  {
+                        client.publish((prefix + "/" + it->key).c_str(), it->value.as<String>().c_str());
+               
+                        Serial.println(prefix + "/" + it->key);
+                    }
+                } else {
+                    char buffer[json.measureLength() + 1];
+                    json.printTo(buffer, sizeof(buffer));
+                    client.publish((prefix + "/data").c_str(), buffer);
+    
+                    Serial.println(prefix + "/data");
+                }
             }
         
-        } else {
+        } 
+        
+        if (!connected){
             json.printTo(Serial);
-            Serial.println("...");
         }
 
 

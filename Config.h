@@ -16,6 +16,8 @@ typedef struct Config
 
     bool mnjson;
     unsigned int minterval;
+
+    char mfingerprint[129];
 } Config_t;
 
 
