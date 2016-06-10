@@ -99,9 +99,30 @@ bool readConfigurationFromSerial()
                  config.minterval = interval;
             }
 
+            if (root.containsKey("mignfingerprint"))
+                config.mignfingerprint = root["mignfingerprint"].as<bool>();
+
             if (root.containsKey("mfingerprint"))              
                 strncpy(&config.mfingerprint[0], (const char *)root["mfingerprint"], 129);
 
+            Serial.print("ssid: ");Serial.println(config.ssid);
+            Serial.print("password: ");Serial.println(config.password);
+            Serial.print("localhost: ");Serial.println(config.localhost);
+            
+            Serial.print("mserver: ");Serial.println(config.mserver);
+            Serial.print("muser: ");Serial.println(config.muser);
+            Serial.print("mpassword: ");Serial.println(config.mpassword);
+            Serial.print("mport: ");Serial.println(config.mport);
+            
+            Serial.print("mprefix: ");Serial.println(config.mprefix);
+            
+            Serial.print("mnjson: ");Serial.println(config.mnjson);
+            Serial.print("minterval: ");Serial.println(config.minterval);
+            
+            Serial.print("mfingerprint: ");Serial.println(config.mfingerprint);
+
+            Serial.print("mignfingerprint: ");Serial.println(config.mignfingerprint);
+            
             SPIFFS.remove("/config.bin");
             
             delay(10);
@@ -279,8 +300,11 @@ void loop() {
                          Serial.print(config.mfingerprint);
                          Serial.print(", host: ");
                          Serial.println(config.mserver);
-                     
-                         client.disconnect();
+
+                         if (config.mignfingerprint)
+                            connected = true;
+                         else
+                            client.disconnect();
                      }
                 }
             }
@@ -308,6 +332,7 @@ void loop() {
         
         if (!connected){
             json.printTo(Serial);
+            Serial.println();
         }
 
 

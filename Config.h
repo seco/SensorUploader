@@ -18,6 +18,7 @@ typedef struct Config
     unsigned int minterval;
 
     char mfingerprint[129];
+    bool mignfingerprint;
 } Config_t;
 
 
