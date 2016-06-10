@@ -24,6 +24,7 @@ if (!String.prototype.startsWith) {
 
 var mqttUri  = 'mqtt://' + config.mqtt.hostname + ':' + config.mqtt.port;
 var client   = mqtt.connect(mqttUri, { 'username' : config.mqtt.username,  'password': config.mqtt.password });
+var mongoIgnore = config.mongodb.ignorematch ? new RegExp(config.mongodb.ignorematch) : null;
 
 client.on('connect', function () {
     client.subscribe(config.mqtt.namespace);
@@ -96,11 +97,12 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
         } catch(e) {
             console.log(e);
         }
-
-        collection.insert(messageObject, function(error, result) {
-            if(error != null) {
-                console.log("ERROR: " + error);
-            }
-        });
+        if (!mongoIgnore || !mongoIgnore.test(topic)) {
+            collection.insert(messageObject, function(error, result) {
+                if(error != null) {
+                    console.log("ERROR: " + error);
+                }
+            });
+        }
     });
 });
