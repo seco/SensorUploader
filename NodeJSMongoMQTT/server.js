@@ -22,6 +22,19 @@ if (!String.prototype.startsWith) {
 }
 
 
+if (!String.prototype.endsWith) {
+  String.prototype.endsWith = function(searchString, position) {
+      var subjectString = this.toString();
+      if (typeof position !== 'number' || !isFinite(position) || Math.floor(position) !== position || position > subjectString.length) {
+        position = subjectString.length;
+      }
+      position -= searchString.length;
+      var lastIndex = subjectString.indexOf(searchString, position);
+      return lastIndex !== -1 && lastIndex === position;
+  };
+}
+
+
 var mqttUri  = 'mqtt://' + config.mqtt.hostname + ':' + config.mqtt.port;
 var client   = mqtt.connect(mqttUri, { 'username' : config.mqtt.username,  'password': config.mqtt.password });
 var mongoIgnore = config.mongodb.ignorematch ? new RegExp(config.mongodb.ignorematch) : null;
@@ -31,6 +44,7 @@ client.on('connect', function () {
 });
 
 var mongoUri = 'mongodb://' + config.mongodb.hostname + ':' + config.mongodb.port + '/' + config.mongodb.database;
+
 mongodb.MongoClient.connect(mongoUri, function(error, database) {
     if(error != null) {
         throw error;
@@ -54,6 +68,62 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
             messageObject.message = JSON.parse(message.toString());
         } catch (e) {
             messageObject.message = message.toString();
+        }
+
+        try {
+            if (config.replstatus && config.replstatus.length) {
+                for (var cond of config.replstatus ) {
+                    var matches = new RegExp(cond.match).exec(topic);
+                    if (matches && cond.topic) {
+                        matches = matches.reduce(function(o, v, i) {
+                            o[i.toString()] = v;
+                            return o;
+                        }, {});
+
+                        matches['topic'] = messageObject.topic;
+                        matches['message'] = messageObject.message;
+                        matches['date'] = messageObject.date;
+
+                        var mtopic = cond.topic.replace(/(^|[^\{])\{(.*?)\}/g, function(st, p1, p2) {
+                            var xobj  = matches;
+
+                            p2.split(/\./).forEach(function(x) {
+                                if (xobj) xobj = xobj[x];
+                            });
+
+                            return p1 + (xobj || '').toString();
+                        });
+
+
+                        if (mtopic.startsWith('/') && mtopic.endsWith('/') && mtopic.length > 2)
+                            mtopic = { $regex: mtopic.substr(1, mtopic.length - 2) };
+
+
+                        collection.aggregate([
+                            { $match: { topic: mtopic }},
+                            { $sort: { date: -1 } },
+                            {
+                                $group:
+                                {
+                                    _id: "$topic",
+                                    topic: { $first: "$topic" },
+                                    message: { $first: "$message" }
+                                }
+                            }
+                        ]).toArray(function(err, result) {
+                            if (result) {
+                                result.forEach(function(x) {
+                                    if (x.topic && x.message)
+                                        client.publish(x.topic, x.message);
+                                })
+
+                            }
+                        });
+                    }
+                }
+            }
+        } catch(e) {
+            console.log(e);
         }
 
         try {

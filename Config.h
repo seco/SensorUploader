@@ -19,6 +19,13 @@ typedef struct Config
 
     char mfingerprint[129];
     bool mignfingerprint;
+
+    char mswitchtopic[65];
+    char mswitchmsg[65];
+
+
+    char mstatustopic[65];
+    char mstatusmsg[65];
 } Config_t;
 
 

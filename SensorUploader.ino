@@ -12,10 +12,10 @@
 #include "BMPAdapter.h"
 #include "TimeSyncronizer.h"
 
+#define RSTPIN 13     // what pin we're connected to
 
-
-
-#define DHTPIN 2     // what pin we're connected to
+#define SWITCH 5     // what pin we're connected to
+#define DHTPIN 4     // what pin we're connected to
 #define SDAPIN 12     // what pin we're connected to
 #define SCLPIN 14     // what pin we're connected to
 
@@ -31,6 +31,9 @@ PubSubClient client;
 
 
 Config config;
+String prefix;
+
+
 
 bool readConfigurationFromSerial()
 {
@@ -105,6 +108,18 @@ bool readConfigurationFromSerial()
             if (root.containsKey("mfingerprint"))              
                 strncpy(&config.mfingerprint[0], (const char *)root["mfingerprint"], 129);
 
+            if (root.containsKey("mswitchtopic"))
+                strncpy(&config.mswitchtopic[0], (const char *)root["mswitchtopic"], 65);
+
+            if (root.containsKey("mswitchmsg"))
+                strncpy(&config.mswitchmsg[0], (const char *)root["mswitchmsg"], 65);
+
+            if (root.containsKey("mstatustopic"))
+                strncpy(&config.mstatustopic[0], (const char *)root["mstatustopic"], 65);
+
+            if (root.containsKey("mstatusmsg"))
+                strncpy(&config.mstatusmsg[0], (const char *)root["mstatusmsg"], 65);
+
             Serial.print("ssid: ");Serial.println(config.ssid);
             Serial.print("password: ");Serial.println(config.password);
             Serial.print("localhost: ");Serial.println(config.localhost);
@@ -123,6 +138,13 @@ bool readConfigurationFromSerial()
 
             Serial.print("mignfingerprint: ");Serial.println(config.mignfingerprint);
             
+            Serial.print("mswitchtopic: ");Serial.println(config.mswitchtopic);
+            Serial.print("mswitchmsg: ");Serial.println(config.mswitchmsg);
+
+            Serial.print("mstatustopic: ");Serial.println(config.mstatustopic);
+            Serial.print("mstatusmsg: ");Serial.println(config.mstatusmsg);
+
+
             SPIFFS.remove("/config.bin");
             
             delay(10);
@@ -159,26 +181,36 @@ bool readConfigurationFromSerial()
 
 
 void callback(char* topic, byte* payload, unsigned int length) {
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.print("] ");
+    Serial.print("Message arrived ");
+    /*Serial.print(topic);
+    Serial.print("[");
+    Serial.print(length);
+    Serial.print("] = ");
     for (int i = 0; i < length; i++) {
         Serial.print((char)payload[i]);
     }
     Serial.println();
+*/
+    boolean on = (length == strlen(config.mswitchmsg) && !memcmp(&config.mswitchmsg[0], payload, length));
+
+    Serial.println(on);
+
+    digitalWrite(SWITCH, on); 
 }
 
 
 void systemRestart() {
     delay(50);
-    pinMode(13, OUTPUT); 
-    digitalWrite(13, LOW); 
+    pinMode(RSTPIN, OUTPUT); 
+    digitalWrite(RSTPIN, LOW); 
 }
 
 void setup() {
     Serial.begin(115200);
 
     SPIFFS.begin();
+
+    pinMode(SWITCH, OUTPUT); 
 
     delay(100);
 
@@ -221,10 +253,9 @@ void setup() {
 
     Serial.print("Connecting to ");
     Serial.print(config.ssid);
-    //Serial.print(":");
-    //Serial.print(config.password);
-    //Serial.print(" ");
 
+
+    prefix = String(config.mprefix[0] == 0 ? config.localhost : config.mprefix);
     
     while (WiFi.status() != WL_CONNECTED)
     {
@@ -243,20 +274,39 @@ void setup() {
     if (!MDNS.begin(config.localhost))
         Serial.println("Error setting up MDNS responder!");
 
-
-    if (strlen(config.mserver)){
+  
+    if (config.mserver[0]){
         if (config.mport == 0)
             config.mport = 1883;
 
         if (config.minterval == 0)
             config.minterval = 10000;
 
+        if (!config.mswitchtopic[0]){
+            strncpy(&config.mswitchtopic[0],(prefix + "/switch").c_str(), 65);
+        }
+    
+        if (!config.mswitchmsg[0]){
+            strncpy(&config.mswitchmsg[0], "on", 65);
+        }
+
+
+        if (!config.mstatustopic[0]){
+            strncpy(&config.mstatustopic[0],(prefix + "/status").c_str(), 65);
+        }
+    
+        if (!config.mstatusmsg[0]){
+            strncpy(&config.mstatusmsg[0], "all", 65);
+        }
+    
+        
         client.setServer(config.mserver, config.mport);
 
         pwclient = config.mfingerprint[0] ? new WiFiClientSecure() : new WiFiClient();
         client.setClient(*pwclient);
-        
         client.setCallback(callback);
+
+        
     } 
 
     time1 = millis();
@@ -278,6 +328,41 @@ void loop() {
         return;
     }
 
+
+    bool connected = false;
+       
+    if (config.mserver[0]) {
+        connected = client.connected();
+        
+        if (!connected) {
+            if (client.connect(config.localhost, config.muser, config.mpassword)) {
+                 connected = !config.mfingerprint[0] || ((WiFiClientSecure *)pwclient)->verify( config.mfingerprint, config.mserver);
+
+                 if (!connected) {
+                     Serial.print("fingerprint doesn't match: ");
+                     Serial.print(config.mfingerprint);
+                     Serial.print(", host: ");
+                     Serial.println(config.mserver);
+
+                     if (config.mignfingerprint) {
+                        connected = true;
+                     } else {
+                        client.disconnect();
+                     }
+                 }
+
+                 if (connected && config.mswitchtopic[0]) {
+                     if (!client.subscribe(config.mswitchtopic)) {
+                        Serial.println("subscription failed");
+                     } else {
+                        delay(500);
+                        client.publish(config.mstatustopic, config.mstatusmsg);
+                     }
+                 }
+            }
+        }
+    }
+
     if (time2 - time1 > config.minterval) {
         
         time1  = time2;
@@ -286,53 +371,26 @@ void loop() {
         JsonObject& json = jsonBuffer.createObject();
         adapterChain->saveAll(&json);
 
-        bool connected = false;
-       
-        if (strlen(config.mserver)) {
-            connected = client.connected();
-            
-            if (!connected) {
-                if (client.connect(config.localhost, config.muser, config.mpassword)) {
-                     connected = !config.mfingerprint[0] || ((WiFiClientSecure *)pwclient)->verify( config.mfingerprint, config.mserver);
 
-                     if (!connected) {
-                         Serial.print("fingerprint doesn't match: ");
-                         Serial.print(config.mfingerprint);
-                         Serial.print(", host: ");
-                         Serial.println(config.mserver);
-
-                         if (config.mignfingerprint)
-                            connected = true;
-                         else
-                            client.disconnect();
-                     }
+        if (connected) {
+            if (config.mnjson) {
+                for (JsonObject::iterator it=json.begin(); it!=json.end(); ++it)  {
+                    client.publish((prefix + "/" + it->key).c_str(), it->value.as<String>().c_str());
+           
+                    Serial.println(prefix + "/" + it->key);
                 }
-            }
+            } else {
+                char buffer[json.measureLength() + 1];
+                json.printTo(buffer, sizeof(buffer));
+                client.publish((prefix + "/data").c_str(), buffer);
 
-
-            if (connected) {
-                String prefix = String(config.mprefix[0] == 0 ? config.localhost : config.mprefix);
-    
-                if (config.mnjson) {
-                    for (JsonObject::iterator it=json.begin(); it!=json.end(); ++it)  {
-                        client.publish((prefix + "/" + it->key).c_str(), it->value.as<String>().c_str());
-               
-                        Serial.println(prefix + "/" + it->key);
-                    }
-                } else {
-                    char buffer[json.measureLength() + 1];
-                    json.printTo(buffer, sizeof(buffer));
-                    client.publish((prefix + "/data").c_str(), buffer);
-    
-                    Serial.println(prefix + "/data");
-                }
+                Serial.println(prefix + "/data");
             }
-        
-        } 
-        
-        if (!connected){
+        } else {
             json.printTo(Serial);
             Serial.println();
+
+            delay(5000);
         }
 
 
