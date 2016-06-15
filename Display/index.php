@@ -1,24 +1,16 @@
-<html>
-    <head>
-        <link href="//fonts.googleapis.com/css?family=Roboto+Slab|Roboto+Mono|Roboto+Condensed|Roboto" rel="stylesheet" type="text/css"></link>
-        <link href="/css/template.css" rel="stylesheet" type="text/css"></link>
-
-        <script src="//ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
-        <script src="//code.highcharts.com/highcharts.js"></script>
-    </head>
-<body>
+<?php @require_once('inc/head.inc'); ?>
     <div id="container" style="width:1000px; height:600px;margin: 0 auto;"></div>
 
 <script type="text/javascript">
 <?php
 
+@include_once('inc/config.inc');
+
 const OVERSEALEVEL = 300;//meters
 
-$manager = new MongoDB\Driver\Manager('mongodb://localhost:27017');
+$manager = new MongoDB\Driver\Manager($config["mongo"]["url"]);
 
-
-
-$mongo_date = new MongoDB\BSON\UTCDateTime((new DateTime())->getTimestamp() * 1000 - 1000 * 60 * 60 * 24 * 2);
+$mongo_date = new MongoDB\BSON\UTCDateTime((new DateTime())->getTimestamp() * 1000 - 1000 * 60 * 60 * 24 * 1);
 
 
 $cursor = $manager->executeCommand('mqtt', new MongoDB\Driver\Command(['aggregate' => 'message', 'pipeline' => [
@@ -133,4 +125,4 @@ $(function () {
 });
 
 </script>
-</body>
+<?php @require_once('inc/foot.inc'); ?>
