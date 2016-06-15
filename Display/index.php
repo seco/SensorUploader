@@ -6,7 +6,7 @@
 
 @include_once('inc/config.inc');
 
-const OVERSEALEVEL = 300;//meters
+const OVERSEALEVEL = 250;//meters
 
 $manager = new MongoDB\Driver\Manager($config["mongo"]["url"]);
 
