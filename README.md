@@ -11,3 +11,5 @@ Serial port is used to configure parameters - wifi connection credentials, mqtt 
 Display - sample script to display data
 
 NodeJSMongoMQTT - sample nodejs script forwarding messages to mongodb collection, and able to forward messages to external web server.
+
+esp board library used - 2.3.0-rc2

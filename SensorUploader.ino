@@ -22,6 +22,7 @@
 // Uncomment whatever type you're using!
 #define DHTTYPE DHT22   // DHT 22  (AM2302)
 
+
 SensorChainedAdapterBase* adapterChain;
 
 unsigned long volatile time1;
@@ -147,7 +148,7 @@ bool readConfigurationFromSerial()
 
             SPIFFS.remove("/config.bin");
             
-            delay(10);
+            optimistic_yield(10);
 
             File configFile = SPIFFS.open("/config.bin", "w");
 
@@ -169,7 +170,7 @@ bool readConfigurationFromSerial()
         {
             bufc += t;
     
-            delay(1);
+            yield();
             
             if (bufc.length() >= 1024)
                 return false;
@@ -200,7 +201,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
 void systemRestart() {
-    delay(50);
+    optimistic_yield(50);
     pinMode(RSTPIN, OUTPUT); 
     digitalWrite(RSTPIN, LOW); 
 }
@@ -212,7 +213,7 @@ void setup() {
 
     pinMode(SWITCH, OUTPUT); 
 
-    delay(100);
+    optimistic_yield(100);
 
     File configFile = SPIFFS.open("/config.bin", "r");
     
@@ -224,7 +225,7 @@ void setup() {
                 Serial.println("Resetting to update configuration");
                 systemRestart();
             }
-            delay(100);
+            optimistic_yield(100);
         }
     } else {
         size_t size = std::min(configFile.size(), sizeof(Config));
@@ -245,7 +246,7 @@ void setup() {
         if (cnt == 0)
             systemRestart();
             
-         delay(1000);
+         optimistic_yield(1000);
     }
     
     WiFi.begin(config.ssid, config.password);
@@ -266,7 +267,7 @@ void setup() {
         }
         
         Serial.print(".");
-        delay(1000);
+        optimistic_yield(1000);
     }
 
     Serial.println();
@@ -305,8 +306,6 @@ void setup() {
         pwclient = config.mfingerprint[0] ? new WiFiClientSecure() : new WiFiClient();
         client.setClient(*pwclient);
         client.setCallback(callback);
-
-        
     } 
 
     time1 = millis();
@@ -315,8 +314,8 @@ void setup() {
 
 void loop() {
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("Disconnected!");
-        delay(30000);
+        Serial.println("disconnected!");
+        optimistic_yield(3000);
         systemRestart();
     }
 
@@ -329,43 +328,46 @@ void loop() {
     }
 
 
-    bool connected = false;
-       
-    if (config.mserver[0]) {
-        connected = client.connected();
+    if (time2 - time1 > config.minterval) {
+        time1  = time2;
         
-        if (!connected) {
-            if (client.connect(config.localhost, config.muser, config.mpassword)) {
-                 connected = !config.mfingerprint[0] || ((WiFiClientSecure *)pwclient)->verify( config.mfingerprint, config.mserver);
+        bool connected = false;
+           
+        if (config.mserver[0]) {
+            connected = client.connected();
+            
+            if (!connected) {
+                if (client.connect(config.localhost, config.muser, config.mpassword)) {
+                     connected = !config.mfingerprint[0] || ((WiFiClientSecure *)pwclient)->verify( config.mfingerprint, config.mserver);
 
-                 if (!connected) {
-                     Serial.print("fingerprint doesn't match: ");
-                     Serial.print(config.mfingerprint);
-                     Serial.print(", host: ");
-                     Serial.println(config.mserver);
-
-                     if (config.mignfingerprint) {
-                        connected = true;
+                     if (!connected) {
+                         Serial.print("fingerprint doesn't match: ");
+                         Serial.print(config.mfingerprint);
+                         Serial.print(", host: ");
+                         Serial.println(config.mserver);
+    
+                         if (config.mignfingerprint) {
+                            connected = true;
+                         } else {
+                            client.disconnect();
+                         }
                      } else {
-                        client.disconnect();
+                         Serial.println("reconnected");
                      }
-                 }
-
-                 if (connected && config.mswitchtopic[0]) {
-                     if (!client.subscribe(config.mswitchtopic)) {
-                        Serial.println("subscription failed");
-                     } else {
-                        delay(500);
-                        client.publish(config.mstatustopic, config.mstatusmsg);
+    
+                     if (connected && config.mswitchtopic[0]) {
+                         if (!client.subscribe(config.mswitchtopic)) {
+                            Serial.println("subscription failed");
+                         } else {
+                            Serial.println("subscription succeded");
+                            client.loop();
+                            client.publish(config.mstatustopic, config.mstatusmsg);
+                         }
                      }
-                 }
+                }
             }
         }
-    }
 
-    if (time2 - time1 > config.minterval) {
-        
-        time1  = time2;
         
         StaticJsonBuffer<200> jsonBuffer;
         JsonObject& json = jsonBuffer.createObject();
@@ -376,34 +378,25 @@ void loop() {
             if (config.mnjson) {
                 for (JsonObject::iterator it=json.begin(); it!=json.end(); ++it)  {
                     client.publish((prefix + "/" + it->key).c_str(), it->value.as<String>().c_str());
-           
                     Serial.println(prefix + "/" + it->key);
                 }
             } else {
                 char buffer[json.measureLength() + 1];
                 json.printTo(buffer, sizeof(buffer));
                 client.publish((prefix + "/data").c_str(), buffer);
-
                 Serial.println(prefix + "/data");
             }
         } else {
             json.printTo(Serial);
             Serial.println();
-
-            delay(5000);
         }
 
 
     }
-        
 
-    if (client.connected())
-      client.loop();
-
-
-
-    delay(100);
-
+   
+    client.loop();
+    
     if (readConfigurationFromSerial())
     {
         Serial.println("Resetting to update configuration");
