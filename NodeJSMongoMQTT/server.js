@@ -29,8 +29,8 @@ client.on('connect', function () {
 
 mongodb.MongoClient.connect(mongoUri, function(error, database) {
     if(error != null) {
-        console.error(error);
-        return; 
+        console.error("ERROR: " + error.toString());
+        return;
     }
 
     //console.log('connected');
@@ -111,7 +111,7 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
         if (!mongoIgnore || !mongoIgnore.test(topic)) {
             collection.insert(messageObject, function(error, result) {
                 if(error != null) {
-                    console.error("ERROR: " + error);
+                    console.error("ERROR: " + error.toString());
                 }
             });
         }
