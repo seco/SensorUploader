@@ -21,16 +21,16 @@ var http = require('http');
 var mqttUri  = 'mqtt://' + config.mqtt.hostname + ':' + config.mqtt.port;
 var client   = mqtt.connect(mqttUri, { 'username' : config.mqtt.username,  'password': config.mqtt.password });
 var mongoIgnore = config.mongodb.ignorematch ? new RegExp(config.mongodb.ignorematch) : null;
+var mongoUri = 'mongodb://' + config.mongodb.hostname + ':' + config.mongodb.port + '/' + config.mongodb.database;
 
 client.on('connect', function () {
     client.subscribe(config.mqtt.namespace);
 });
 
-var mongoUri = 'mongodb://' + config.mongodb.hostname + ':' + config.mongodb.port + '/' + config.mongodb.database;
-
 mongodb.MongoClient.connect(mongoUri, function(error, database) {
     if(error != null) {
-        throw error;
+        console.error(error);
+        return; 
     }
 
     //console.log('connected');
@@ -56,31 +56,12 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
         try {
             if (config.replstatus && config.replstatus.length) {
                 for (var cond of config.replstatus ) {
-                    var matches = new RegExp(cond.match).exec(topic);
+                    var matches = topic.matchGetObject(cond.match || '', messageObject);
                     if (matches && cond.topic) {
-                        matches = matches.reduce(function(o, v, i) {
-                            o[i.toString()] = v;
-                            return o;
-                        }, {});
-
-                        matches['topic'] = messageObject.topic;
-                        matches['message'] = messageObject.message;
-                        matches['date'] = messageObject.date;
-
-                        var mtopic = cond.topic.replace(/(^|[^\{])\{(.*?)\}/g, function(st, p1, p2) {
-                            var xobj  = matches;
-
-                            p2.split(/\./).forEach(function(x) {
-                                if (xobj) xobj = xobj[x];
-                            });
-
-                            return p1 + (xobj || '').toString();
-                        });
-
+                        var mtopic = cond.topic.formatUsingObject(matches);
 
                         if (mtopic.startsWith('/') && mtopic.endsWith('/') && mtopic.length > 2)
                             mtopic = { $regex: mtopic.substr(1, mtopic.length - 2) };
-
 
                         collection.aggregate([
                             { $match: { topic: mtopic }},
@@ -106,40 +87,17 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
                 }
             }
         } catch(e) {
-            console.log(e);
+            console.error(e);
         }
 
         try {
             if (config.httpforward && config.httpforward.length) {
                 for (var cond of config.httpforward ) {
-                    var matches = new RegExp(cond.match).exec(topic);
+                    var matches = topic.matchGetObject(cond.match || '', messageObject);
+
                     if (matches && cond.url) {
-                        matches = matches.reduce(function(o, v, i) {
-                            o[i.toString()] = v;
-                            return o;
-                        }, {});
+                        var url = cond.url.formatUsingObject(matches);
 
-                        matches['topic'] = messageObject.topic;
-                        matches['message'] = messageObject.message;
-                        matches['date'] = messageObject.date;
-
-                        var url = cond.url.replace(/(^|[^\{])\{(.*?)\}/g, function(st, p1, p2) {
-                            var xobj  = matches;
-
-                            p2.split(/\./).forEach(function(x) {
-                                if (xobj) xobj = xobj[x];
-                            });
-
-                            return p1 + (xobj || '').toString();
-                        }).replace(/&#7b;(.*?)&#7d;/g, function(st, p2) {
-                            var xobj  = matches;
-
-                            p2.split(/\./).forEach(function(x) {
-                                if (xobj) xobj = xobj[x];
-                            });
-
-                            return encodeURIComponent((xobj || '').toString());
-                        });
                         if (url.startsWith('https://'))
                             https.get(url);
                         else if (url.startsWith('http://'))
@@ -148,12 +106,12 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
                 }
             }
         } catch(e) {
-            console.log(e);
+            console.error(e);
         }
         if (!mongoIgnore || !mongoIgnore.test(topic)) {
             collection.insert(messageObject, function(error, result) {
                 if(error != null) {
-                    console.log("ERROR: " + error);
+                    console.error("ERROR: " + error);
                 }
             });
         }
