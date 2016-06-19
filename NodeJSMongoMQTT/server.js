@@ -16,8 +16,6 @@ var config   = require('./config');
 var https = require('https');
 var http = require('http');
 
-
-
 var mqttUri  = 'mqtt://' + config.mqtt.hostname + ':' + config.mqtt.port;
 var client   = mqtt.connect(mqttUri, { 'username' : config.mqtt.username,  'password': config.mqtt.password });
 var mongoIgnore = config.mongodb.ignorematch ? new RegExp(config.mongodb.ignorematch) : null;
