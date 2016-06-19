@@ -1,20 +1,22 @@
 /**
- *
  * This NodeJS application listens to MQTT messages and records them to MongoDB
- *
  * @author  Dennis de Greef <github@link0.net>, Daniil Bystrukhin <dannsk@mail.ru>
- * @license MIT
- *
+ * @license MIT 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+ * INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+ * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE 
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE 
+ * OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 require('./utils');
+var config   = require('./config');
 
 var mongodb  = require('mongodb');
 var mqtt     = require('mqtt');
-var config   = require('./config');
+var request = require('then-request');
 
-var https = require('https');
-var http = require('http');
 
 var mqttUri  = 'mqtt://' + config.mqtt.hostname + ':' + config.mqtt.port;
 var client   = mqtt.connect(mqttUri, { 'username' : config.mqtt.username,  'password': config.mqtt.password });
@@ -31,14 +33,11 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
         return;
     }
 
-    //console.log('connected');
     var collection = database.collection(config.mongodb.collection);
     collection.createIndex( { "topic" : 1 } );
     collection.createIndex( { "date" : -1 } );
 
-
     client.on('message', function (topic, message) {
-        //console.log('message ' + topic);
         var messageObject = {
             topic: topic,
             message: message.toString(),
@@ -51,19 +50,64 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
             messageObject.message = message.toString();
         }
 
+        var insertDb = function(messageObject) {
+            if ((!mongoIgnore || !mongoIgnore.test(messageObject.topic)) && (messageObject.message !== null && messageObject.message !== '')) {
+
+                collection.insert(messageObject, function(error, result) {
+                    if(error != null) {
+                        console.error("ERROR: " + error.toString());
+                    }
+                });
+            }
+        };
+	
         try {
+            var handled = false;
+
             if (config.rules && config.rules.length) {
                 for (var cond of config.rules ) {
+
                     var matches = topic.matchGetObject(cond.match || '', messageObject);
                     if (matches) {
+                        if (typeof cond.handled !== 'undefined')
+                            handled |= cond.handled;
 
                         if (cond.url) {
+
                             var url = cond.url.formatUsingObject(matches);
 
-                            if (url.startsWith('https://'))
-                                https.get(url);
-                            else if (url.startsWith('http://'))
-                                http.get(url);
+                            request('GET', url).done(function (res) {
+                                if (res.statusCode < 300) {
+                                    var data = res.getBody().toString('utf8');
+
+                                    try {
+                                        matches['data'] = JSON.parse(data);
+                                    } catch (e) {
+                                        matches['data'] = data;
+                                    }
+
+                                    var intMessageObject = {};
+
+                                    for (var i in messageObject) 
+                                        intMessageObject[i] = messageObject[i];
+
+                                    if (cond.formatmsg) {
+                                        message = cond.formatmsg.formatUsingObject(matches);
+
+                                        try {
+                                            intMessageObject.message = JSON.parse(message.toString());
+                                        } catch (e) {
+                                            intMessageObject.message = message.toString();
+                                        }
+                                    }
+
+                                    if (cond.formattopic) {
+                                        intMessageObject.topic = cond.formattopic.formatUsingObject(matches);
+                                    }
+
+                                    insertDb(intMessageObject);
+                                }
+                            });
                         }
 
                         if (cond.topic){
@@ -96,16 +140,11 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
                     }
                 }
             }
+
+            if (!handled)
+		insertDb(messageObject);
         } catch(e) {
             console.error(e);
-        }
-
-        if (!mongoIgnore || !mongoIgnore.test(topic)) {
-            collection.insert(messageObject, function(error, result) {
-                if(error != null) {
-                    console.error("ERROR: " + error.toString());
-                }
-            });
         }
     });
 });
