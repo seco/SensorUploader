@@ -9,29 +9,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 
     $manager = new MongoDB\Driver\Manager($config["mongo"]["url"]);
+    $topic = $config["mongo"]["topic"];
+    if (!isset($topic))
+        $topic = ['$regex' => '.*\/switch'];
 
-    $cursor = $manager->executeCommand('mqtt', new MongoDB\Driver\Command(['aggregate' => 'message', 'pipeline' => [
-        [ '$match' => ['topic' => ['$regex' => '.*/switch']]],
-        [ '$project' =>  [
-           'date' =>  '$date',
-           'message'  => '$message',
-           'topic' =>  '$topic']
-       ],
-       [ '$sort'  =>  [ 'date'  =>  -1 ] ],
-       [ '$group' => [
-           '_id' =>  '$topic',
-           'date' => [ '$first' =>  '$date' ],
-           'message' => [ '$first' =>  '$message' ],
-           'topic' => [ '$first' =>  '$topic' ],
-       ]],
+    $filter =  ['topic' => $topic];
+    $options = ['projection' => ['topic' => '$topic', 'message' => '$message' ],'sort' => ['topic' => 1]];
 
+    $query = new MongoDB\Driver\Query($filter, $options);
+    $cursor = $manager->executeQuery('mqtt.message', $query);
 
-    ]]));
-
-    $res = (array)($cursor->toArray()[0]);
-    $res = (array)($res['result']);
-
-    foreach ($res as $value) {
+    foreach ($cursor as $value) {
         $id = str_replace('/', '_', $value->topic);
 ?>
 <div>

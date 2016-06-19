@@ -1,12 +1,12 @@
 /**
  * This NodeJS application listens to MQTT messages and records them to MongoDB
  * @author  Dennis de Greef <github@link0.net>, Daniil Bystrukhin <dannsk@mail.ru>
- * @license MIT 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
- * INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
- * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE 
- * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, 
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE 
+ * @license MIT
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
  * OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
@@ -51,16 +51,31 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
         }
 
         var insertDb = function(messageObject) {
-            if ((!mongoIgnore || !mongoIgnore.test(messageObject.topic)) && (messageObject.message !== null && messageObject.message !== '')) {
 
-                collection.insert(messageObject, function(error, result) {
-                    if(error != null) {
-                        console.error("ERROR: " + error.toString());
+            if (!mongoIgnore || !mongoIgnore.test(messageObject.topic)) {
+                var insertOneDb = function (error1, result1) {
+                    if(error1 != null) {
+                        console.error("ERROR: " + error1.toString());
+                    } else if (messageObject.message !== null && messageObject.message !== '') {
+
+                        delete messageObject.unique;
+
+                        collection.insert(messageObject, function(error, result) {
+                            if(error != null) {
+                                console.error("ERROR: " + error.toString());
+                            }
+                        });
                     }
-                });
+                };
+
+                if (messageObject.unique) {
+                    collection.deleteMany({'topic': messageObject.topic}, insertOneDb);
+                } else {
+                    insertOneDb();
+                }
             }
         };
-	
+
         try {
             var handled = false;
 
@@ -71,6 +86,8 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
                     if (matches) {
                         if (typeof cond.handled !== 'undefined')
                             handled |= cond.handled;
+
+                        messageObject.unique = (typeof cond.unique !== 'undefined') && cond.unique;
 
                         if (cond.url) {
 
@@ -88,7 +105,7 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
 
                                     var intMessageObject = {};
 
-                                    for (var i in messageObject) 
+                                    for (var i in messageObject)
                                         intMessageObject[i] = messageObject[i];
 
                                     if (cond.formatmsg) {
