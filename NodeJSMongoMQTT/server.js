@@ -52,35 +52,47 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
         }
 
         try {
-            if (config.replstatus && config.replstatus.length) {
-                for (var cond of config.replstatus ) {
+            if (config.rules && config.rules.length) {
+                for (var cond of config.rules ) {
                     var matches = topic.matchGetObject(cond.match || '', messageObject);
-                    if (matches && cond.topic) {
-                        var mtopic = cond.topic.formatUsingObject(matches);
+                    if (matches) {
 
-                        if (mtopic.startsWith('/') && mtopic.endsWith('/') && mtopic.length > 2)
-                            mtopic = { $regex: mtopic.substr(1, mtopic.length - 2) };
+                        if (cond.url) {
+                            var url = cond.url.formatUsingObject(matches);
 
-                        collection.aggregate([
-                            { $match: { topic: mtopic }},
-                            { $sort: { date: -1 } },
-                            {
-                                $group:
+                            if (url.startsWith('https://'))
+                                https.get(url);
+                            else if (url.startsWith('http://'))
+                                http.get(url);
+                        }
+
+                        if (cond.topic){
+                            var mtopic = cond.topic.formatUsingObject(matches);
+
+                            if (mtopic.startsWith('/') && mtopic.endsWith('/') && mtopic.length > 2)
+                                mtopic = { $regex: mtopic.substr(1, mtopic.length - 2) };
+
+                            collection.aggregate([
+                                { $match: { topic: mtopic }},
+                                { $sort: { date: -1 } },
                                 {
-                                    _id: "$topic",
-                                    topic: { $first: "$topic" },
-                                    message: { $first: "$message" }
+                                    $group:
+                                    {
+                                        _id: "$topic",
+                                        topic: { $first: "$topic" },
+                                        message: { $first: "$message" }
+                                    }
                                 }
-                            }
-                        ]).toArray(function(err, result) {
-                            if (result) {
-                                result.forEach(function(x) {
-                                    if (x.topic && x.message)
-                                        client.publish(x.topic, x.message);
-                                })
+                            ]).toArray(function(err, result) {
+                                if (result) {
+                                    result.forEach(function(x) {
+                                        if (x.topic && x.message)
+                                            client.publish(x.topic, x.message);
+                                    })
 
-                            }
-                        });
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -88,24 +100,6 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
             console.error(e);
         }
 
-        try {
-            if (config.httpforward && config.httpforward.length) {
-                for (var cond of config.httpforward ) {
-                    var matches = topic.matchGetObject(cond.match || '', messageObject);
-
-                    if (matches && cond.url) {
-                        var url = cond.url.formatUsingObject(matches);
-
-                        if (url.startsWith('https://'))
-                            https.get(url);
-                        else if (url.startsWith('http://'))
-                            http.get(url);
-                    }
-                }
-            }
-        } catch(e) {
-            console.error(e);
-        }
         if (!mongoIgnore || !mongoIgnore.test(topic)) {
             collection.insert(messageObject, function(error, result) {
                 if(error != null) {
