@@ -7,7 +7,7 @@
  *
  */
 
-require('utils');
+require('./utils');
 
 var mongodb  = require('mongodb');
 var mqtt     = require('mqtt');
