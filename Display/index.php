@@ -6,15 +6,20 @@
 
 @include_once('inc/config.inc');
 
-const OVERSEALEVEL = 250;//meters
 
 $manager = new MongoDB\Driver\Manager($config["mongo"]["url"]);
 
 $mongo_date = new MongoDB\BSON\UTCDateTime((new DateTime())->getTimestamp() * 1000 - 1000 * 60 * 60 * 24 * 1);
 
 
+$topic = @$config["mongo"]["topic"]["data"];
+if (!isset($topic))
+    $topic = 'hu/data';
+
+
+
 $cursor = $manager->executeCommand('mqtt', new MongoDB\Driver\Command(['aggregate' => 'message', 'pipeline' => [
-    [ '$match' => ['topic' => 'hu/data', 'date' => ['$gte' => $mongo_date ]]],
+    [ '$match' => ['topic' => $topic, 'date' => ['$gte' => $mongo_date ]]],
     [ '$project' =>  [
        'y' => ['$year' => '$date'],
        'm' => ['$month' => '$date'],
@@ -55,7 +60,7 @@ foreach($res as $value) {
         }
         else {
             if (strrpos($key, 'pressure', -strlen($key)) !== false)
-                $vl = ($vl / pow(1.0-OVERSEALEVEL/44330.0, 5.255));
+                $vl = ($vl / pow(1.0- $config["sealevel"]/44330.0, 5.255));
             $vl = round($vl * 100) / 100;
         }
         array_push($data[$key], $vl);
