@@ -1,4 +1,5 @@
 <?php
+@include_once('inc/auth.inc');
 
 @include_once('inc/config.inc');
 
