@@ -35,7 +35,7 @@ config.rules.push({
 
 config.rules.push( {
     'match': process.env.REPLSTATUS_MATCH || 'sender\/(data)',
-    'url': process.env.HTTPFORWARD_URL || 'https://maker.ifttt.com/trigger/{1}/with/key/blablabla?value1={message.temperature1}&value2={message.pressure1}&value3=&#7b;date&#7d;';,
+    'url': process.env.HTTPFORWARD_URL || 'https://maker.ifttt.com/trigger/{1}/with/key/blablabla?value1={message.temperature1}&value2={message.pressure1}&value3=&#7b;date&#7d;',
     'handled' : true
 });
 

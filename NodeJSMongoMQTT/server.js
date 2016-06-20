@@ -13,19 +13,11 @@
 require('./utils');
 var config   = require('./config');
 
-var mongodb  = require('mongodb');
-var mqtt     = require('mqtt');
-var request = require('then-request');
+var service  = new (require('./service'))(config);
 
+console.log(service);
 
-var mqttUri  = 'mqtt://' + config.mqtt.hostname + ':' + config.mqtt.port;
-var client   = mqtt.connect(mqttUri, { 'username' : config.mqtt.username,  'password': config.mqtt.password });
-var mongoIgnore = config.mongodb.ignorematch ? new RegExp(config.mongodb.ignorematch) : null;
-var mongoUri = 'mongodb://' + config.mongodb.hostname + ':' + config.mongodb.port + '/' + config.mongodb.database;
-
-client.on('connect', function () {
-    client.subscribe(config.mqtt.namespace);
-});
+/*
 
 mongodb.MongoClient.connect(mongoUri, function(error, database) {
     if(error != null) {
@@ -159,9 +151,10 @@ mongodb.MongoClient.connect(mongoUri, function(error, database) {
             }
 
             if (!handled)
-		insertDb(messageObject);
+                insertDb(messageObject);
         } catch(e) {
             console.error(e);
         }
     });
 });
+*/
