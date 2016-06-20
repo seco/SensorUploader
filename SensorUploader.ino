@@ -267,7 +267,7 @@ void setup() {
         }
         
         Serial.print(".");
-        optimistic_yield(1000);
+        delay(1000);
     }
 
     Serial.println();
@@ -396,6 +396,7 @@ void loop() {
 
    
     client.loop();
+    delay(10);
     
     if (readConfigurationFromSerial())
     {
