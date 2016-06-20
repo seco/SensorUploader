@@ -13,9 +13,16 @@
 require('./utils');
 var config   = require('./config');
 
+if (!config.debug) {
+    console.log = function (){};
+    console.info = function (){};
+    console.error = function (){};
+}
+
+
 var service  = new (require('./service'))(config);
 
-console.log(service);
+service.start()
 
 /*
 
