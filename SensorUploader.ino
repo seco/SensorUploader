@@ -7,10 +7,12 @@
 #include <FS.h>
 
 #include "Config.h"
+#include "TaskScheduler.h"
 #include "SensorChainedAdapterBase.h"
 #include "DHTAdapter.h"
 #include "BMPAdapter.h"
 #include "TimeSyncronizer.h"
+
 
 #define RSTPIN 13     // what pin we're connected to
 
@@ -25,7 +27,7 @@
 
 SensorChainedAdapterBase* adapterChain;
 
-unsigned long volatile time1;
+TaskScheduler task;
 
 Client* pwclient;
 PubSubClient client;
@@ -148,7 +150,7 @@ bool readConfigurationFromSerial()
 
             SPIFFS.remove("/config.bin");
             
-            optimistic_yield(10);
+            TaskScheduler::wait(10);
 
             File configFile = SPIFFS.open("/config.bin", "w");
 
@@ -183,15 +185,7 @@ bool readConfigurationFromSerial()
 
 void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print("Message arrived ");
-    /*Serial.print(topic);
-    Serial.print("[");
-    Serial.print(length);
-    Serial.print("] = ");
-    for (int i = 0; i < length; i++) {
-        Serial.print((char)payload[i]);
-    }
-    Serial.println();
-*/
+
     boolean on = (length == strlen(config.mswitchmsg) && !memcmp(&config.mswitchmsg[0], payload, length));
 
     Serial.println(on);
@@ -201,7 +195,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
 void systemRestart() {
-    optimistic_yield(50);
+    TaskScheduler::wait(50);
     pinMode(RSTPIN, OUTPUT); 
     digitalWrite(RSTPIN, LOW); 
 }
@@ -213,7 +207,7 @@ void setup() {
 
     pinMode(SWITCH, OUTPUT); 
 
-    optimistic_yield(100);
+    TaskScheduler::wait(100);
 
     File configFile = SPIFFS.open("/config.bin", "r");
     
@@ -225,7 +219,8 @@ void setup() {
                 Serial.println("Resetting to update configuration");
                 systemRestart();
             }
-            optimistic_yield(100);
+            Serial.print(".");
+            TaskScheduler::wait(1000);
         }
     } else {
         size_t size = std::min(configFile.size(), sizeof(Config));
@@ -238,16 +233,22 @@ void setup() {
 
     adapterChain = new BMPAdapter(SDAPIN, SCLPIN, "1");
 
-    int cnt = 10;
-    
-    while (cnt-- > 0 && !adapterChain->beginAll()) {
-        Serial.println("Could not find a valid sensor, check wiring!");
+    Serial.println("Verifying sensors");
+   
+    while (!adapterChain->beginAll()) {
+        
 
-        if (cnt == 0)
+        if (readConfigurationFromSerial())
+        {
+            Serial.println("Resetting to update configuration");
             systemRestart();
-            
-         optimistic_yield(1000);
+        }
+
+        Serial.print(".");
+        TaskScheduler::wait(1000);
     }
+
+    Serial.println();
     
     WiFi.begin(config.ssid, config.password);
     WiFi.hostname(config.localhost);
@@ -267,7 +268,7 @@ void setup() {
         }
         
         Serial.print(".");
-        delay(1000);
+        TaskScheduler::wait(1000);
     }
 
     Serial.println();
@@ -308,29 +309,19 @@ void setup() {
         client.setCallback(callback);
     } 
 
-    time1 = millis();
+    task.setInterval(config.minterval)
+      .start();
 }
 
 
 void loop() {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("disconnected!");
-        optimistic_yield(3000);
+        TaskScheduler::wait(3000);
         systemRestart();
     }
 
-    unsigned long time2 = millis();
-
-    if (time2 < time1)
-    {
-        time1 = time2;
-        return;
-    }
-
-
-    if (time2 - time1 > config.minterval) {
-        time1  = time2;
-        
+    if (task.loop()) {
         bool connected = false;
            
         if (config.mserver[0]) {
@@ -396,7 +387,7 @@ void loop() {
 
    
     client.loop();
-    delay(10);
+    TaskScheduler::wait(10);
     
     if (readConfigurationFromSerial())
     {
