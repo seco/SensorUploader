@@ -20,10 +20,20 @@ void SensorChainedAdapterBase::endAll() {
 };
 bool SensorChainedAdapterBase::saveAll(JsonObject* obj) {
     bool res = true;
-    
+
     for(SensorChainedAdapterBase* pThis = this; pThis != NULL; pThis = pThis->next()) {
         res &= pThis->save(obj);
     }
 
     return res;
+}
+
+
+bool SensorChainedAdapterBase::checkAll() {
+    for(SensorChainedAdapterBase* pThis = this; pThis != NULL; pThis = pThis->next()) {
+        if (pThis->check())
+            return true;
+    }
+
+    return false;
 }

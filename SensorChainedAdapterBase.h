@@ -9,6 +9,7 @@ public:
 
     virtual const char* name() const { return mName; };
 
+    virtual bool check() { return false; };
     virtual bool begin() { return false; };
     virtual void end() {};
     virtual bool save(JsonObject*) { return true; };
@@ -17,6 +18,7 @@ public:
     virtual bool beginAll();
     virtual void endAll();
     virtual bool saveAll(JsonObject*);
+    virtual bool checkAll();
 
     virtual ~SensorChainedAdapterBase() { end(); }
 

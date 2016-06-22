@@ -10,7 +10,7 @@ bool BMPAdapter::save(JsonObject* json) {
     float p = mSensor.readPressure();
     float t = mSensor.readTemperature();
 
-    if (isnan(p) || isnan(t))
+    if (isnan(p) || p > 1500 || p <= 0 || isnan(t))
         return false;
 
     (*json)[String("pressure") + mSuffix] = p;
