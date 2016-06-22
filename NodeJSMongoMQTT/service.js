@@ -125,7 +125,7 @@ class Service extends EventEmitter {
                                         idata.topic = cond.formattopic.formatUsingObject(matches);
                                     }
 
-                                    insertDb(intMessageObject);
+                                    self.emit('mongo-data', idata);
                                 }
                             });
                         }
