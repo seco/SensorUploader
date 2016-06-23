@@ -137,7 +137,7 @@ class Service extends EventEmitter {
                             if (mtopic.startsWith('/') && mtopic.endsWith('/') && mtopic.length > 2)
                                 mtopic = { $regex: mtopic.substr(1, mtopic.length - 2) };
 
-                            collection.aggregate([
+                            self.mongoCollection.aggregate([
                                 { $match: { topic: mtopic }},
                                 { $sort: { date: -1 } },
                                 {
@@ -149,9 +149,9 @@ class Service extends EventEmitter {
                                     }
                                 }
                             ]).toArray(function(err, result) {
-                                if(error != null) {
-                                    console.error("ERROR: " + error.toString());
-                                    self.emit('mongo-error', error.toString());
+                                if(err != null) {
+                                    console.error("ERROR: " + err.toString());
+                                    self.emit('mongo-error', err.toString());
                                 } else if (result) {
                                     result.forEach(function(x) {
                                         if (x.topic && x.message && self.client)
