@@ -2,7 +2,7 @@
 
 
 bool BMPAdapter::begin() {
-    return mSensor.begin();
+    return mSensor.begin(BMP085_STANDARD);
 }
 
 

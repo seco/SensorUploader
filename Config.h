@@ -28,6 +28,8 @@ typedef struct Config
     char mstatusmsg[65];
 
     char mswitchmsgoff[65];
+
+    bool debug;
 } Config_t;
 
 

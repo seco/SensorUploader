@@ -21,6 +21,7 @@
 #define BTNPIN 5     // what pin we're connected to
 #define SDAPIN 12     // what pin we're connected to
 #define SCLPIN 14     // what pin we're connected to
+#define DHTPIN 13     // what pin we're connected to
 
 // Uncomment whatever type you're using!
 #define DHTTYPE DHT22   // DHT 22  (AM2302)
@@ -127,6 +128,9 @@ bool readConfigurationFromSerial()
             if (root.containsKey("mswitchmsgoff"))
                 strncpy(&config.mswitchmsgoff[0], (const char *)root["mswitchmsgoff"], 65);
 
+            if (root.containsKey("debug"))
+                config.debug = root["debug"].as<bool>();
+                
             Serial.print("ssid: ");Serial.println(config.ssid);
             Serial.print("password: ");Serial.println(config.password);
             Serial.print("localhost: ");Serial.println(config.localhost);
@@ -152,7 +156,8 @@ bool readConfigurationFromSerial()
             Serial.print("mstatustopic: ");Serial.println(config.mstatustopic);
             Serial.print("mstatusmsg: ");Serial.println(config.mstatusmsg);
 
-
+            Serial.print("debug: ");Serial.println(config.debug);
+            
             SPIFFS.remove("/config.bin");
 
             TaskScheduler::wait(10);
@@ -200,7 +205,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
         digitalWrite(SWITCH, on);
     }
-    
+
 }
 
 
@@ -242,8 +247,8 @@ void setup() {
 
 
     adapterChain = (new BMPAdapter(SDAPIN, SCLPIN, "1"));
-    adapterChain->next(new ButtonAdapter(BTNPIN, (const char *)&config.mswitchmsgon, (const char *)&config.mswitchmsgoff, "2"));
-
+    adapterChain->next(new ButtonAdapter(BTNPIN, (const char *)&config.mswitchmsgon, (const char *)&config.mswitchmsgoff, "2"))
+                ->next(new DHTAdapter(DHTPIN, DHTTYPE, "3"));
     Serial.println();
     Serial.println("Verifying sensors");
 
@@ -391,7 +396,9 @@ void loop() {
                 client.publish((prefix + "/data").c_str(), buffer);
                 Serial.println(prefix + "/data");
             }
-        } else {
+        } 
+        
+        if (!connected || config.debug){
             json.printTo(Serial);
             Serial.println();
         }

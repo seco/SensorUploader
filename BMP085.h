@@ -50,7 +50,13 @@
 
 class BMP085 {
  public:
+ #ifdef ESP8266
   BMP085(int16_t sda, int16_t scl);
+ #else
+  BMP085();
+ #endif
+
+ 
   boolean begin(uint8_t mode = BMP085_ULTRAHIGHRES);  // by default go highres
   float readTemperature(bool use_fahrenheit = false);
   int32_t readPressure(bool use_mmhg = true);

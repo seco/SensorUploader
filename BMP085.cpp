@@ -1,35 +1,55 @@
-/*************************************************** 
+/***************************************************
   This is a library for the Adafruit BMP085/BMP180 Barometric Pressure + Temp sensor
 
-  Designed specifically to work with the Adafruit BMP085 or BMP180 Breakout 
+  Designed specifically to work with the Adafruit BMP085 or BMP180 Breakout
   ----> http://www.adafruit.com/products/391
   ----> http://www.adafruit.com/products/1603
 
-  These displays use I2C to communicate, 2 pins are required to  
+  These displays use I2C to communicate, 2 pins are required to
   interface
-  Adafruit invests time and resources providing this open source code, 
-  please support Adafruit and open-source hardware by purchasing 
+  Adafruit invests time and resources providing this open source code,
+  please support Adafruit and open-source hardware by purchasing
   products from Adafruit!
 
-  Written by Limor Fried/Ladyada for Adafruit Industries.  
+  Written by Limor Fried/Ladyada for Adafruit Industries.
   BSD license, all text above must be included in any redistribution
  ****************************************************/
 
 #include "BMP085.h"
 
+#ifdef ESP8266
+#include "TaskScheduler.h"
+
+#define DELAY(x) TaskScheduler::wait(x);
+
 BMP085::BMP085(int16_t sda, int16_t scl) : nsda(sda), nscl(scl) {
 }
 
+#else
+
+BMP085::BMP085() {
+}
+
+#endif
+
+//#define BMP085_DEBUG 1
+
+
 
 boolean BMP085::begin(uint8_t mode) {
-  if (mode > BMP085_ULTRAHIGHRES) 
+  if (mode > BMP085_ULTRAHIGHRES)
     mode = BMP085_ULTRAHIGHRES;
   oversampling = mode;
-
+#ifdef ESP8266
   Wire.begin(nsda,nscl);
+#else
+  Wire.begin();
+#endif
+
 
   if (read8(0xD0) != 0x55) return false;
 
+  DELAY(10)
   /* read calibration data */
   ac1 = read16(BMP085_CAL_AC1);
   ac2 = read16(BMP085_CAL_AC2);
@@ -71,7 +91,7 @@ int32_t BMP085::computeB5(int32_t UT) {
 
 uint16_t BMP085::readRawTemperature(void) {
   write8(BMP085_CONTROL, BMP085_READTEMPCMD);
-  delay(5);
+  DELAY(5)
 #if BMP085_DEBUG == 1
   Serial.print("Raw temp: "); Serial.println(read16(BMP085_TEMPDATA));
 #endif
@@ -83,14 +103,14 @@ uint32_t BMP085::readRawPressure(void) {
 
   write8(BMP085_CONTROL, BMP085_READPRESSURECMD + (oversampling << 6));
 
-  if (oversampling == BMP085_ULTRALOWPOWER) 
-    delay(5);
-  else if (oversampling == BMP085_STANDARD) 
-    delay(8);
-  else if (oversampling == BMP085_HIGHRES) 
-    delay(14);
-  else 
-    delay(26);
+  if (oversampling == BMP085_ULTRALOWPOWER)
+    DELAY(5)
+  else if (oversampling == BMP085_STANDARD)
+    DELAY(8)
+  else if (oversampling == BMP085_HIGHRES)
+    DELAY(14)
+  else
+    DELAY(26)
 
   raw = read16(BMP085_PRESSUREDATA);
 
@@ -217,7 +237,7 @@ float BMP085::readTemperature(bool use_fahrenheit) {
   B5 = computeB5(UT);
   temp = (B5+8) >> 4;
   temp /= 10;
-  
+
   return use_fahrenheit ? 32.0 + (temp * 9.0 / 5.0): temp;
 }
 
@@ -237,11 +257,11 @@ float BMP085::readAltitude(float sealevelPressure) {
 uint8_t BMP085::read8(uint8_t a) {
   uint8_t ret;
 
-  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device 
+  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device
   Wire.write(a); // sends register address to read from
   Wire.endTransmission(); // end transmission
-  
-  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device 
+
+  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device
   Wire.requestFrom(BMP085_I2CADDR, 1);// send data n-bytes read
   ret = Wire.read(); // receive DATA
   Wire.endTransmission(); // end transmission
@@ -252,11 +272,11 @@ uint8_t BMP085::read8(uint8_t a) {
 uint16_t BMP085::read16(uint8_t a) {
   uint16_t ret;
 
-  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device 
+  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device
   Wire.write(a); // sends register address to read from
   Wire.endTransmission(); // end transmission
-  
-  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device 
+
+  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device
   Wire.requestFrom(BMP085_I2CADDR, 2);// send data n-bytes read
   ret = Wire.read(); // receive DATA
   ret <<= 8;
@@ -267,7 +287,7 @@ uint16_t BMP085::read16(uint8_t a) {
 }
 
 void BMP085::write8(uint8_t a, uint8_t d) {
-  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device 
+  Wire.beginTransmission(BMP085_I2CADDR); // start transmission to device
   Wire.write(a); // sends register address to read from
   Wire.write(d);  // write data
   Wire.endTransmission(); // end transmission
