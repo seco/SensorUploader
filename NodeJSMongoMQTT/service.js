@@ -90,6 +90,7 @@ class Service extends EventEmitter {
                                 //
                             }
                         }
+
                         data.unique = (typeof cond.unique !== 'undefined') && cond.unique;
 
                         if (cond.url) {
@@ -153,8 +154,8 @@ class Service extends EventEmitter {
                                     self.emit('mongo-error', error.toString());
                                 } else if (result) {
                                     result.forEach(function(x) {
-                                        if (x.topic && x.message)
-                                            client.publish(x.topic, x.message);
+                                        if (x.topic && x.message && self.client)
+                                            self.client.publish(x.topic, x.message);
                                     })
 
                                 }
