@@ -251,8 +251,8 @@ void setup() {
                 ->next(new DHTAdapter(DHTPIN, DHTTYPE, "3"));
     Serial.println();
     Serial.println("Verifying sensors");
-
-    while (!adapterChain->beginAll()) {
+    int cnt = 0;
+    while (!adapterChain->beginAll() && cnt++ < 10) {
 
 
         if (readConfigurationFromSerial())

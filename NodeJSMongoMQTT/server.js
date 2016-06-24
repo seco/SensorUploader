@@ -23,4 +23,3 @@ if (!config.debug) {
 var service  = new (require('./service'))(config);
 
 service.start()
-
