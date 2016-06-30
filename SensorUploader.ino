@@ -130,7 +130,7 @@ bool readConfigurationFromSerial()
 
             if (root.containsKey("debug"))
                 config.debug = root["debug"].as<bool>();
-                
+
             Serial.print("ssid: ");Serial.println(config.ssid);
             Serial.print("password: ");Serial.println(config.password);
             Serial.print("localhost: ");Serial.println(config.localhost);
@@ -157,7 +157,7 @@ bool readConfigurationFromSerial()
             Serial.print("mstatusmsg: ");Serial.println(config.mstatusmsg);
 
             Serial.print("debug: ");Serial.println(config.debug);
-            
+
             SPIFFS.remove("/config.bin");
 
             TaskScheduler::wait(10);
@@ -253,8 +253,6 @@ void setup() {
     Serial.println("Verifying sensors");
     int cnt = 0;
     while (!adapterChain->beginAll() && cnt++ < 10) {
-
-
         if (readConfigurationFromSerial())
         {
             Serial.println("Resetting to update configuration");
@@ -396,8 +394,8 @@ void loop() {
                 client.publish((prefix + "/data").c_str(), buffer);
                 Serial.println(prefix + "/data");
             }
-        } 
-        
+        }
+
         if (!connected || config.debug){
             json.printTo(Serial);
             Serial.println();

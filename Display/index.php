@@ -16,6 +16,24 @@ $topic = @$config["mongo"]["topic"]["data"];
 if (!isset($topic))
     $topic = 'hu/data';
 
+$fields = @$config["mqtt"]["fields"];
+if (!isset($fields))
+    $fields = [];
+
+
+$groupcond = [
+   '_id' =>  [ 'y' => '$y','m' => '$m','d' => '$d','h' => '$h'],
+   'total' => [ '$sum' =>  1 ],
+   'date' => [ '$max' =>  '$date' ],
+];
+
+$data = [];
+
+foreach($fields as $key) {
+    $groupcond[$key] = [ '$avg' =>  '$message.'.$key ];
+    $data[$key] = [];
+}
+
 
 
 $cursor = $manager->executeCommand('mqtt', new MongoDB\Driver\Command(['aggregate' => 'message', 'pipeline' => [
@@ -29,13 +47,7 @@ $cursor = $manager->executeCommand('mqtt', new MongoDB\Driver\Command(['aggregat
        'message'  => '$message',
        'topic' =>  '$topic']
    ],
-    [ '$group' => [
-       '_id' =>  [ 'y' => '$y','m' => '$m','d' => '$d','h' => '$h'],
-       'total' => [ '$sum' =>  1 ],
-       'date' => [ '$max' =>  '$date' ],
-       'temperature1' => [ '$avg' =>  '$message.temperature1' ],
-       'pressure1' => [ '$avg' =>  '$message.pressure1' ],
-   ]],
+   [ '$group' => $groupcond],
    [ '$sort'  =>  [ 'date'  =>  -1 ] ],
 
 ]]));
@@ -43,7 +55,7 @@ $cursor = $manager->executeCommand('mqtt', new MongoDB\Driver\Command(['aggregat
 $res = (array)($cursor->toArray()[0]);
 $res = (array)($res['result']);
 
-$data = ['temperature1' => [], 'pressure1' => []];
+
 
 $categories = [];
 
@@ -61,18 +73,19 @@ foreach($res as $value) {
         else {
             if (strrpos($key, 'pressure', -strlen($key)) !== false)
                 $vl = ($vl / pow(1.0- $config["sealevel"]/44330.0, 5.255));
+
             $vl = round($vl * 100) / 100;
         }
         array_push($data[$key], $vl);
     }
 
-        $date = new DateTime();
-        $date->setDate($xkey['y'], $xkey['m'], $xkey['d']);
-        $date->setTime($xkey['h'], 0, 0);
-        if (date('Z') > 0)
-            $date->add(new DateInterval('PT'.abs(date('Z')).'S'));
-        else
-            $date->sub(new DateInterval('PT'.abs(date('Z')).'S'));
+    $date = new DateTime();
+    $date->setDate($xkey['y'], $xkey['m'], $xkey['d']);
+    $date->setTime($xkey['h'], 0, 0);
+    if (date('Z') > 0)
+        $date->add(new DateInterval('PT'.abs(date('Z')).'S'));
+    else
+        $date->sub(new DateInterval('PT'.abs(date('Z')).'S'));
 
     array_push($categories, $date->format('Y-m-d H:00:00') );
 
