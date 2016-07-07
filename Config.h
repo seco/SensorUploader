@@ -30,6 +30,11 @@ typedef struct Config
     char mswitchmsgoff[65];
 
     bool debug;
+
+    char mupdatetopic[65];
+
+
+    
 } Config_t;
 
 

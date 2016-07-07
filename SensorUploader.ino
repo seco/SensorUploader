@@ -6,6 +6,8 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 
+#include <ESP8266httpUpdate.h>
+
 #include "Config.h"
 #include "TaskScheduler.h"
 #include "SensorChainedAdapterBase.h"
@@ -128,6 +130,9 @@ bool readConfigurationFromSerial()
             if (root.containsKey("mswitchmsgoff"))
                 strncpy(&config.mswitchmsgoff[0], (const char *)root["mswitchmsgoff"], 65);
 
+            if (root.containsKey("mupdatetopic"))
+                strncpy(&config.mupdatetopic[0], (const char *)root["mupdatetopic"], 65);
+
             if (root.containsKey("debug"))
                 config.debug = root["debug"].as<bool>();
 
@@ -158,6 +163,8 @@ bool readConfigurationFromSerial()
 
             Serial.print("debug: ");Serial.println(config.debug);
 
+            Serial.print("mupdatetopic: ");Serial.println(config.mupdatetopic);
+            
             SPIFFS.remove("/config.bin");
 
             TaskScheduler::wait(10);
@@ -194,18 +201,53 @@ bool readConfigurationFromSerial()
 
 
 void callback(char* topic, byte* payload, unsigned int length) {
-    bool on = (length == strlen(config.mswitchmsgon) && !memcmp(&config.mswitchmsgon[0], payload, length));
-    bool off = (length == strlen(config.mswitchmsgoff) && !memcmp(&config.mswitchmsgoff[0], payload, length));
+    bool update = config.mupdatetopic[0] && !strcmp(config.mupdatetopic, topic);
 
-    if (on || off)
-    {
-        Serial.print("Message arrived ");
+    char payloads[1 + length];
+    memset(payloads, 0, 1 + length);
+    memcpy(payloads, payload, length);
 
-        Serial.println(on);
+    
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print(" ");
+    Serial.print(payloads);            
+    Serial.println("]");
+    
+    if (update) {
 
-        digitalWrite(SWITCH, on);
+        ESPhttpUpdate.rebootOnUpdate(false);
+        
+        t_httpUpdate_return ret = ESPhttpUpdate.update(payloads);
+
+        switch(ret) {
+            case HTTP_UPDATE_FAILED:
+                Serial.printf("Update failed Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+                break;
+
+            case HTTP_UPDATE_NO_UPDATES:
+                Serial.println("Update no updates");
+                break;
+
+            case HTTP_UPDATE_OK:
+                Serial.println("Update okato");
+                break;
+        }
+
+        systemRestart();
+
+    } else {
+        
+        bool on = (length == strlen(config.mswitchmsgon) && !strcmp(config.mswitchmsgon, payloads));
+        bool off = (length == strlen(config.mswitchmsgoff) && !strcmp(config.mswitchmsgoff, payloads));
+    
+        if (on || off)
+        {
+            Serial.println(on);
+    
+            digitalWrite(SWITCH, on);
+        }
     }
-
 }
 
 
@@ -217,9 +259,13 @@ void systemRestart() {
 
 void setup() {
     Serial.begin(115200);
-
+    
     SPIFFS.begin();
+    
+    WiFi.disconnect(1);
 
+    TaskScheduler::wait(1000);
+    
     pinMode(SWITCH, OUTPUT);
 
     TaskScheduler::wait(100);
@@ -252,7 +298,7 @@ void setup() {
     Serial.println();
     Serial.println("Verifying sensors");
     int cnt = 0;
-    while (!adapterChain->beginAll() && cnt++ < 10) {
+    while (!adapterChain->beginAll() && cnt++ < 5) {
         if (readConfigurationFromSerial())
         {
             Serial.println("Resetting to update configuration");
@@ -265,16 +311,19 @@ void setup() {
 
     Serial.println();
 
+    if (config.localhost[0])
+        WiFi.hostname(config.localhost);
+    
     WiFi.begin(config.ssid, config.password);
-    WiFi.hostname(config.localhost);
-
+    
     Serial.print("Connecting to ");
     Serial.print(config.ssid);
 
-
+    TaskScheduler::wait(1000);
+    
     prefix = String(config.mprefix[0] == 0 ? config.localhost : config.mprefix);
 
-    while (WiFi.status() != WL_CONNECTED)
+    while (!WiFi.isConnected())
     {
         if (readConfigurationFromSerial())
         {
@@ -283,6 +332,7 @@ void setup() {
         }
 
         Serial.print(".");
+            
         TaskScheduler::wait(1000);
     }
 
@@ -332,7 +382,7 @@ void setup() {
 
 
 void loop() {
-    if (WiFi.status() != WL_CONNECTED) {
+    if (!WiFi.isConnected()) {
         Serial.println("disconnected!");
         TaskScheduler::wait(3000);
         systemRestart();
@@ -363,14 +413,26 @@ void loop() {
                          Serial.println("reconnected");
                      }
 
-                     if (connected && config.mswitchtopic[0]) {
-                         if (!client.subscribe(config.mswitchtopic)) {
-                            Serial.println("subscription failed");
-                         } else {
-                            Serial.println("subscription succeded");
-                            client.loop();
-                            client.publish(config.mstatustopic, config.mstatusmsg);
+                     if (connected) { 
+                          if (config.mupdatetopic[0]) {
+                             if (!client.subscribe(config.mupdatetopic)) {
+                                Serial.println("subscription failed");
+                             } else {
+                                Serial.println("subscription succeded");
+                                client.loop();
+                             }
                          }
+                         
+                         if (config.mswitchtopic[0]) {
+                             if (!client.subscribe(config.mswitchtopic)) {
+                                Serial.println("subscription failed");
+                             } else {
+                                Serial.println("subscription succeded");
+                                client.loop();
+                                client.publish(config.mstatustopic, config.mstatusmsg);
+                             }
+                         }
+   
                      }
                 }
             }
