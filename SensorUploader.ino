@@ -230,7 +230,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
                 break;
 
             case HTTP_UPDATE_OK:
-                Serial.println("Update okato");
+                Serial.println("Update ok");
                 break;
         }
 
