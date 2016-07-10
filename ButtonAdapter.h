@@ -34,8 +34,8 @@ private:
     int16_t mPin;
     bool mChanged;
     bool mValue;
-    const char* pMsgOn;
-    const char* pMsgOff;
+    const String pMsgOn;
+    const String pMsgOff;
 };
 
 

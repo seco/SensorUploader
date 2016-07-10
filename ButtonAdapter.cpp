@@ -44,10 +44,7 @@ bool ButtonAdapter::save(JsonObject* json)
 {
     if (mChanged)
     {
-        const char* pMsg = mValue ? pMsgOn : pMsgOff;
-
-        if (pMsg != NULL)
-            (*json)[String("button") + mSuffix] = pMsg;
+        (*json)[String("button") + mSuffix] = mValue ? pMsgOn : pMsgOff;
     }
 
     mChanged = false;

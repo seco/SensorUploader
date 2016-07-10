@@ -1,5 +1,5 @@
 #include "SensorChainedAdapterBase.h"
-#include "Arduino.h"
+
 
 bool SensorChainedAdapterBase::beginAll() {
     for(SensorChainedAdapterBase* pThis = this; pThis != NULL; pThis = pThis->next()) {
@@ -13,11 +13,21 @@ bool SensorChainedAdapterBase::beginAll() {
 
     return true;
 }
+
 void SensorChainedAdapterBase::endAll() {
     for(SensorChainedAdapterBase* pThis = this; pThis != NULL; pThis = pThis->next()) {
         pThis->end();
     }
-};
+}
+
+void SensorChainedAdapterBase::applyAll(SENSOR_CALLBACK_SIGNATURE) {
+    for(SensorChainedAdapterBase* pThis = this; pThis != NULL; pThis = pThis->next()) {
+		callback(pThis);
+    }
+}
+
+
+
 bool SensorChainedAdapterBase::saveAll(JsonObject* obj) {
     bool res = true;
 
@@ -26,6 +36,17 @@ bool SensorChainedAdapterBase::saveAll(JsonObject* obj) {
     }
 
     return res;
+}
+
+bool SensorChainedAdapterBase::processAll(char* topic, char* payload) {
+    for(SensorChainedAdapterBase* pThis = this; pThis != NULL; pThis = pThis->next()) {
+		const char* pTopic = pThis->topic();
+
+        if (pTopic && topic && topic[0] && pTopic[0] && !strcmp(pTopic, topic) && pThis->process(topic, payload))
+            return true;
+    }
+
+    return false;
 }
 
 

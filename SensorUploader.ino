@@ -8,16 +8,18 @@
 
 #include <ESP8266httpUpdate.h>
 
+#include "UpdateAdapter.h"
 #include "Config.h"
+#include "Utils.h"
 #include "TaskScheduler.h"
 #include "SensorChainedAdapterBase.h"
 #include "DHTAdapter.h"
 #include "BMPAdapter.h"
 #include "ButtonAdapter.h"
+#include "RelayAdapter.h"
 #include "TimeSyncronizer.h"
 
 
-#define RSTPIN 16     // what pin we're connected to
 
 #define SWITCH 4     // what pin we're connected to
 #define BTNPIN 5     // what pin we're connected to
@@ -27,6 +29,7 @@
 
 // Uncomment whatever type you're using!
 #define DHTTYPE DHT22   // DHT 22  (AM2302)
+
 
 
 SensorChainedAdapterBase* adapterChain;
@@ -42,437 +45,396 @@ String prefix;
 
 
 
-bool readConfigurationFromSerial()
+bool readConfigurationFromSerial()//TODO: this works really non-stable, sometimes part of the data missing - sometimes data itself completely missing, so really need to rewrite, also to output JSON also
 {
-    String bufc;
+	String bufc;
 
-    while(Serial.available() > 0) {
-        char t = Serial.read();
+	while(Serial.available() > 0) {
+		char t = Serial.read();
 
-        if (t == '\r' || t == '\n')
-        {
+		if (t == '\r' || t == '\n')
+		{
 
-            if (!bufc.length())
-                return false;
+			if (!bufc.length())
+				return false;
 
-            //Serial.println(bufc);
+			//Serial.println(bufc);
 
-            StaticJsonBuffer<2048> jsonBuffer;
-            JsonObject& root = jsonBuffer.parseObject(bufc);
+			StaticJsonBuffer<2048> jsonBuffer;
+			JsonObject& root = jsonBuffer.parseObject(bufc);
 
-            if (!root.success()) {
-                Serial.println("Parse Error");
-                return false;
-            }
+			if (!root.success()) {
+				Serial.println("Parse Error");
+				return false;
+			}
 
-            //root.printTo(Serial);
+			//root.printTo(Serial);
 
-            if (root.containsKey("ssid"))
-                strncpy(&config.ssid[0],(const char *)root["ssid"], 33);
+			if (root.containsKey("ssid"))
+				strncpy(&config.ssid[0],(const char *)root["ssid"], 33);
 
-            if (root.containsKey("password"))
-                strncpy(&config.password[0], (const char *)root["password"], 65);
+			if (root.containsKey("password"))
+				strncpy(&config.password[0], (const char *)root["password"], 65);
 
-            if (root.containsKey("localhost"))
-                strncpy(&config.localhost[0], (const char *)root["localhost"], 129);
+			if (root.containsKey("localhost"))
+				strncpy(&config.localhost[0], (const char *)root["localhost"], 129);
 
-            if (root.containsKey("mserver"))
-                strncpy(&config.mserver[0], (const char *)root["mserver"], 129);
+			if (root.containsKey("mserver"))
+				strncpy(&config.mserver[0], (const char *)root["mserver"], 129);
 
-            if (root.containsKey("mpassword"))
-                strncpy(&config.mpassword[0], (const char *)root["mpassword"], 65);
+			if (root.containsKey("mpassword"))
+				strncpy(&config.mpassword[0], (const char *)root["mpassword"], 65);
 
-            if (root.containsKey("muser"))
-                strncpy(&config.muser[0], (const char *)root["muser"], 65);
+			if (root.containsKey("muser"))
+				strncpy(&config.muser[0], (const char *)root["muser"], 65);
 
-            if (root.containsKey("mprefix"))
-                strncpy(&config.mprefix[0], (const char *)root["mprefix"], 129);
+			if (root.containsKey("mprefix"))
+				strncpy(&config.mprefix[0], (const char *)root["mprefix"], 129);
 
-            if (root.containsKey("mnjson"))
-                config.mnjson = root["mnjson"].as<bool>();
+			if (root.containsKey("mnjson"))
+				config.mnjson = root["mnjson"].as<bool>();
 
-            if (root.containsKey("mport")) {
-                int port = root["mport"].as<int>();
+			if (root.containsKey("mport")) {
+				int port = root["mport"].as<int>();
 
-                if (port <= 0 || port >= 65535)
-                    port = 1883;
+				if (port <= 0 || port >= 65535)
+					port = 1883;
 
-                 config.mport = port;
-            }
+				config.mport = port;
+			}
 
-             if (root.containsKey("minterval")) {
-                int interval = root["minterval"].as<int>();
+			if (root.containsKey("minterval")) {
+				int interval = root["minterval"].as<int>();
 
-                if (interval <= 0 || interval >= 3600 * 1000)
-                    interval = 10000;
+				if (interval <= 0 || interval >= 3600 * 1000)
+					interval = 10000;
 
-                 config.minterval = interval;
-            }
+				config.minterval = interval;
+			}
 
-            if (root.containsKey("mignfingerprint"))
-                config.mignfingerprint = root["mignfingerprint"].as<bool>();
+			if (root.containsKey("mignfingerprint"))
+				config.mignfingerprint = root["mignfingerprint"].as<bool>();
 
-            if (root.containsKey("mfingerprint"))
-                strncpy(&config.mfingerprint[0], (const char *)root["mfingerprint"], 129);
+			if (root.containsKey("mfingerprint"))
+				strncpy(&config.mfingerprint[0], (const char *)root["mfingerprint"], 129);
 
-            if (root.containsKey("mswitchtopic"))
-                strncpy(&config.mswitchtopic[0], (const char *)root["mswitchtopic"], 65);
+			if (root.containsKey("mswitchtopic"))
+				strncpy(&config.mswitchtopic[0], (const char *)root["mswitchtopic"], 65);
 
-            if (root.containsKey("mswitchmsgon"))
-                strncpy(&config.mswitchmsgon[0], (const char *)root["mswitchmsgon"], 65);
+			if (root.containsKey("mswitchmsgon"))
+				strncpy(&config.mswitchmsgon[0], (const char *)root["mswitchmsgon"], 65);
 
-            if (root.containsKey("mstatustopic"))
-                strncpy(&config.mstatustopic[0], (const char *)root["mstatustopic"], 65);
+			if (root.containsKey("mstatustopic"))
+				strncpy(&config.mstatustopic[0], (const char *)root["mstatustopic"], 65);
 
-            if (root.containsKey("mstatusmsg"))
-                strncpy(&config.mstatusmsg[0], (const char *)root["mstatusmsg"], 65);
+			if (root.containsKey("mstatusmsg"))
+				strncpy(&config.mstatusmsg[0], (const char *)root["mstatusmsg"], 65);
 
-            if (root.containsKey("mswitchmsgoff"))
-                strncpy(&config.mswitchmsgoff[0], (const char *)root["mswitchmsgoff"], 65);
+			if (root.containsKey("mswitchmsgoff"))
+				strncpy(&config.mswitchmsgoff[0], (const char *)root["mswitchmsgoff"], 65);
 
-            if (root.containsKey("mupdatetopic"))
-                strncpy(&config.mupdatetopic[0], (const char *)root["mupdatetopic"], 65);
+			if (root.containsKey("mupdatetopic"))
+				strncpy(&config.mupdatetopic[0], (const char *)root["mupdatetopic"], 65);
 
-            if (root.containsKey("debug"))
-                config.debug = root["debug"].as<bool>();
+			if (root.containsKey("debug"))
+				config.debug = root["debug"].as<bool>();
 
-            Serial.print("ssid: ");Serial.println(config.ssid);
-            Serial.print("password: ");Serial.println(config.password);
-            Serial.print("localhost: ");Serial.println(config.localhost);
+			Serial.print("ssid: ");Serial.println(config.ssid);
+			Serial.print("password: ");Serial.println(config.password);
+			Serial.print("localhost: ");Serial.println(config.localhost);
 
-            Serial.print("mserver: ");Serial.println(config.mserver);
-            Serial.print("muser: ");Serial.println(config.muser);
-            Serial.print("mpassword: ");Serial.println(config.mpassword);
-            Serial.print("mport: ");Serial.println(config.mport);
+			Serial.print("mserver: ");Serial.println(config.mserver);
+			Serial.print("muser: ");Serial.println(config.muser);
+			Serial.print("mpassword: ");Serial.println(config.mpassword);
+			Serial.print("mport: ");Serial.println(config.mport);
 
-            Serial.print("mprefix: ");Serial.println(config.mprefix);
+			Serial.print("mprefix: ");Serial.println(config.mprefix);
 
-            Serial.print("mnjson: ");Serial.println(config.mnjson);
-            Serial.print("minterval: ");Serial.println(config.minterval);
+			Serial.print("mnjson: ");Serial.println(config.mnjson);
+			Serial.print("minterval: ");Serial.println(config.minterval);
 
-            Serial.print("mfingerprint: ");Serial.println(config.mfingerprint);
+			Serial.print("mfingerprint: ");Serial.println(config.mfingerprint);
 
-            Serial.print("mignfingerprint: ");Serial.println(config.mignfingerprint);
+			Serial.print("mignfingerprint: ");Serial.println(config.mignfingerprint);
 
-            Serial.print("mswitchtopic: ");Serial.println(config.mswitchtopic);
-            Serial.print("mswitchmsgon: ");Serial.println(config.mswitchmsgon);
-            Serial.print("mswitchmsgoff: ");Serial.println(config.mswitchmsgoff);
+			Serial.print("mswitchtopic: ");Serial.println(config.mswitchtopic);
+			Serial.print("mswitchmsgon: ");Serial.println(config.mswitchmsgon);
+			Serial.print("mswitchmsgoff: ");Serial.println(config.mswitchmsgoff);
 
-            Serial.print("mstatustopic: ");Serial.println(config.mstatustopic);
-            Serial.print("mstatusmsg: ");Serial.println(config.mstatusmsg);
+			Serial.print("mstatustopic: ");Serial.println(config.mstatustopic);
+			Serial.print("mstatusmsg: ");Serial.println(config.mstatusmsg);
 
-            Serial.print("debug: ");Serial.println(config.debug);
+			Serial.print("debug: ");Serial.println(config.debug);
 
-            Serial.print("mupdatetopic: ");Serial.println(config.mupdatetopic);
-            
-            SPIFFS.remove("/config.bin");
+			Serial.print("mupdatetopic: ");Serial.println(config.mupdatetopic);
 
-            TaskScheduler::wait(10);
+			SPIFFS.remove("/config.bin");
 
-            File configFile = SPIFFS.open("/config.bin", "w");
+			TaskScheduler::wait(10);
 
-
-
-            if (!configFile) {
-                Serial.println("Failed to open config file for writing");
-                return false;
-            }
+			File configFile = SPIFFS.open("/config.bin", "w");
 
 
-            configFile.write((const uint8_t*)&config, sizeof(Config));
 
-            configFile.close();
+			if (!configFile) {
+				Serial.println("Failed to open config file for writing");
+				return false;
+			}
 
-            return true;
-        }
-        else
-        {
-            bufc += t;
 
-            yield();
+			configFile.write((const uint8_t*)&config, sizeof(Config));
 
-            if (bufc.length() >= 1024)
-                return false;
-        }
-    }
+			configFile.close();
 
-    return false;
+			return true;
+		}
+		else
+		{
+			bufc += t;
+
+			yield();
+
+			if (bufc.length() >= 1024)
+				return false;
+		}
+	}
+
+	return false;
 }
 
 
 void callback(char* topic, byte* payload, unsigned int length) {
-    bool update = config.mupdatetopic[0] && !strcmp(config.mupdatetopic, topic);
 
-    char payloads[1 + length];
-    memset(payloads, 0, 1 + length);
-    memcpy(payloads, payload, length);
+	char payloads[1 + length];
+	memset(payloads, 0, 1 + length);
+	memcpy(payloads, payload, length);
+	Serial.printf("message [%s, %s] arrived\r\n", topic, payloads);
 
-    
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.print(" ");
-    Serial.print(payloads);            
-    Serial.println("]");
-    
-    if (update) {
-
-        ESPhttpUpdate.rebootOnUpdate(false);
-        
-        t_httpUpdate_return ret = ESPhttpUpdate.update(payloads);
-
-        switch(ret) {
-            case HTTP_UPDATE_FAILED:
-                Serial.printf("Update failed Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
-                break;
-
-            case HTTP_UPDATE_NO_UPDATES:
-                Serial.println("Update no updates");
-                break;
-
-            case HTTP_UPDATE_OK:
-                Serial.println("Update ok");
-                break;
-        }
-
-        systemRestart();
-
-    } else {
-        
-        bool on = (length == strlen(config.mswitchmsgon) && !strcmp(config.mswitchmsgon, payloads));
-        bool off = (length == strlen(config.mswitchmsgoff) && !strcmp(config.mswitchmsgoff, payloads));
-    
-        if (on || off)
-        {
-            Serial.println(on);
-    
-            digitalWrite(SWITCH, on);
-        }
-    }
+	adapterChain->processAll(topic, payloads);
 }
 
 
-void systemRestart() {
-    TaskScheduler::wait(50);
-    pinMode(RSTPIN, OUTPUT);
-    digitalWrite(RSTPIN, LOW);
-}
+
 
 void setup() {
-    Serial.begin(115200);
-    
-    SPIFFS.begin();
-    
-    WiFi.disconnect(1);
+	Serial.begin(115200);
 
-    TaskScheduler::wait(1000);
-    
-    pinMode(SWITCH, OUTPUT);
+	SPIFFS.begin();
 
-    TaskScheduler::wait(100);
+	WiFi.disconnect(1);
 
-    File configFile = SPIFFS.open("/config.bin", "r");
+	TaskScheduler::wait(1000);
 
-    if (!configFile) {
-        Serial.println("Waiting for configuration (no file)");
-        while (true) {
-            if (readConfigurationFromSerial())
-            {
-                Serial.println("Resetting to update configuration");
-                systemRestart();
-            }
-            Serial.print(".");
-            TaskScheduler::wait(1000);
-        }
-    } else {
-        size_t size = std::min(configFile.size(), sizeof(Config));
-        configFile.readBytes((char *)&config, size);
-        configFile.close();
-    }
+	File configFile = SPIFFS.open("/config.bin", "r");
 
+	if (!configFile) {
+		Serial.println("Waiting for configuration (no file)");
+		while (true) {
+			if (readConfigurationFromSerial())
+			{
+				Serial.println("Resetting to update configuration");
+				Utils::systemRestart();
+			}
+			Serial.print(".");
+			TaskScheduler::wait(1000);
+		}
+	} else {
+		size_t size = std::min(configFile.size(), sizeof(Config));
+		configFile.readBytes((char *)&config, size);
+		configFile.close();
+	}
 
+	adapterChain =  (new UpdateAdapter((const char *)&config.mupdatetopic));
+	adapterChain->next (new BMPAdapter(SDAPIN, SCLPIN, "1"))
+		->next(new RelayAdapter((const char *)&config.mswitchtopic, SWITCH, (const char *)&config.mswitchmsgon, (const char *)&config.mswitchmsgoff))
+		->next(new ButtonAdapter(BTNPIN, (const char *)&config.mswitchmsgon, (const char *)&config.mswitchmsgoff, "2"))
+		->next(new DHTAdapter(DHTPIN, DHTTYPE, "3"));
+	Serial.println();
+	Serial.println("Verifying sensors");
+	int cnt = 0;
+	while (!adapterChain->beginAll() && cnt++ < 5) {
+		if (readConfigurationFromSerial())
+		{
+			Serial.println("Resetting to update configuration");
+			Utils::systemRestart();
+		}
 
+		Serial.print(".");
+		TaskScheduler::wait(1000);
+	}
 
-    adapterChain = (new BMPAdapter(SDAPIN, SCLPIN, "1"));
-    adapterChain->next(new ButtonAdapter(BTNPIN, (const char *)&config.mswitchmsgon, (const char *)&config.mswitchmsgoff, "2"))
-                ->next(new DHTAdapter(DHTPIN, DHTTYPE, "3"));
-    Serial.println();
-    Serial.println("Verifying sensors");
-    int cnt = 0;
-    while (!adapterChain->beginAll() && cnt++ < 5) {
-        if (readConfigurationFromSerial())
-        {
-            Serial.println("Resetting to update configuration");
-            systemRestart();
-        }
+	Serial.println();
 
-        Serial.print(".");
-        TaskScheduler::wait(1000);
-    }
+	if (config.localhost[0])
+		WiFi.hostname(config.localhost);
 
-    Serial.println();
+	WiFi.begin(config.ssid, config.password);
 
-    if (config.localhost[0])
-        WiFi.hostname(config.localhost);
-    
-    WiFi.begin(config.ssid, config.password);
-    
-    Serial.print("Connecting to ");
-    Serial.print(config.ssid);
+	Serial.print("Connecting to ");
+	Serial.print(config.ssid);
 
-    TaskScheduler::wait(1000);
-    
-    prefix = String(config.mprefix[0] == 0 ? config.localhost : config.mprefix);
+	TaskScheduler::wait(1000);
 
-    while (!WiFi.isConnected())
-    {
-        if (readConfigurationFromSerial())
-        {
-            Serial.println("Resetting to update configuration");
-            systemRestart();
-        }
+	prefix = String(config.mprefix[0] == 0 ? config.localhost : config.mprefix);
 
-        Serial.print(".");
-            
-        TaskScheduler::wait(1000);
-    }
+	while (!WiFi.isConnected())
+	{
+		if (readConfigurationFromSerial())
+		{
+			Serial.println("Resetting to update configuration");
+			Utils::systemRestart();
+		}
 
-    Serial.println();
+		Serial.print(".");
 
-    if (!MDNS.begin(config.localhost))
-        Serial.println("Error setting up MDNS responder!");
+		TaskScheduler::wait(1000);
+	}
+
+	Serial.println();
+
+	if (!MDNS.begin(config.localhost))
+		Serial.println("Error setting up MDNS responder!");
 
 
-    if (config.mserver[0]){
-        if (config.mport == 0)
-            config.mport = 1883;
+	if (config.mserver[0]){
+		if (config.mport == 0)
+			config.mport = 1883;
 
-        if (config.minterval == 0)
-            config.minterval = 10000;
+		if (config.minterval == 0)
+			config.minterval = 10000;
 
-        if (!config.mswitchtopic[0]){
-            strncpy(&config.mswitchtopic[0],(prefix + "/switch").c_str(), 65);
-        }
+		if (!config.mswitchtopic[0]){
+			strncpy(&config.mswitchtopic[0],(prefix + "/switch").c_str(), 65);
+		}
 
-        if (!config.mswitchmsgon[0]){
-            strncpy(&config.mswitchmsgon[0], "on", 65);
-        }
-        if (!config.mswitchmsgoff[0]){
-            strncpy(&config.mswitchmsgoff[0], "off", 65);
-        }
+		if (!config.mswitchmsgon[0]){
+			strncpy(&config.mswitchmsgon[0], "on", 65);
+		}
+		if (!config.mswitchmsgoff[0]){
+			strncpy(&config.mswitchmsgoff[0], "off", 65);
+		}
 
-        if (!config.mstatustopic[0]){
-            strncpy(&config.mstatustopic[0],(prefix + "/status").c_str(), 65);
-        }
+		if (!config.mstatustopic[0]){
+			strncpy(&config.mstatustopic[0],(prefix + "/status").c_str(), 65);
+		}
 
-        if (!config.mstatusmsg[0]){
-            strncpy(&config.mstatusmsg[0], "all", 65);
-        }
+		if (!config.mstatusmsg[0]){
+			strncpy(&config.mstatusmsg[0], "all", 65);
+		}
 
 
-        client.setServer(config.mserver, config.mport);
+		client.setServer(config.mserver, config.mport);
 
-        pwclient = config.mfingerprint[0] ? new WiFiClientSecure() : new WiFiClient();
-        client.setClient(*pwclient);
-        client.setCallback(callback);
-    }
+		pwclient = config.mfingerprint[0] ? new WiFiClientSecure() : new WiFiClient();
+		client.setClient(*pwclient);
+		client.setCallback(callback);
+	}
 
-    task.setInterval(config.minterval)
-      .start();
+	task.setInterval(config.minterval)
+		.start();
 }
 
 
+void subscribeOne(const SensorChainedAdapterBase* adapter)
+{
+	if (adapter) 
+	{
+		const char* topic = adapter->topic();
+
+		if (topic && topic[0])
+		{
+			if (!client.subscribe(topic)) 
+			{
+				Serial.printf("subscription [%s] failed\r\n", topic);
+			} 
+			else 
+			{
+				Serial.printf("subscription [%s] succeded\r\n", topic);
+				client.loop();
+			}
+		}
+	}
+}
+
 void loop() {
-    if (!WiFi.isConnected()) {
-        Serial.println("disconnected!");
-        TaskScheduler::wait(3000);
-        systemRestart();
-    }
+	if (!WiFi.isConnected()) {
+		Serial.println("disconnected!");
+		TaskScheduler::wait(3000);
+		Utils::systemRestart();
+	}
 
-    if (task.loop() || adapterChain->checkAll()) {
-        bool connected = false;
+	if (task.loop() || adapterChain->checkAll()) {
+		bool connected = false;
 
-        if (config.mserver[0]) {
-            connected = client.connected();
+		if (config.mserver[0]) {
+			connected = client.connected();
 
-            if (!connected) {
-                if (client.connect(config.localhost, config.muser, config.mpassword)) {
-                     connected = !config.mfingerprint[0] || ((WiFiClientSecure *)pwclient)->verify( config.mfingerprint, config.mserver);
+			if (!connected) {
+				if (client.connect(config.localhost, config.muser, config.mpassword)) {
+					connected = !config.mfingerprint[0] || ((WiFiClientSecure *)pwclient)->verify( config.mfingerprint, config.mserver);
 
-                     if (!connected) {
-                         Serial.print("fingerprint doesn't match: ");
-                         Serial.print(config.mfingerprint);
-                         Serial.print(", host: ");
-                         Serial.println(config.mserver);
+					if (!connected) {
+						Serial.print("fingerprint doesn't match: ");
+						Serial.print(config.mfingerprint);
+						Serial.print(", host: ");
+						Serial.println(config.mserver);
 
-                         if (config.mignfingerprint) {
-                            connected = true;
-                         } else {
-                            client.disconnect();
-                         }
-                     } else {
-                         Serial.println("reconnected");
-                     }
+						if (config.mignfingerprint) {
+							connected = true;
+						} else {
+							client.disconnect();
+						}
+					} else {
+						Serial.println("reconnected");
+					}
 
-                     if (connected) { 
-                          if (config.mupdatetopic[0]) {
-                             if (!client.subscribe(config.mupdatetopic)) {
-                                Serial.println("subscription failed");
-                             } else {
-                                Serial.println("subscription succeded");
-                                client.loop();
-                             }
-                         }
-                         
-                         if (config.mswitchtopic[0]) {
-                             if (!client.subscribe(config.mswitchtopic)) {
-                                Serial.println("subscription failed");
-                             } else {
-                                Serial.println("subscription succeded");
-                                client.loop();
-                                client.publish(config.mstatustopic, config.mstatusmsg);
-                             }
-                         }
-   
-                     }
-                }
-            }
-        }
+					if (connected) { 
+						adapterChain->applyAll(&subscribeOne);
+
+						if (config.mstatustopic[0]) {
+							client.publish(config.mstatustopic, config.mstatusmsg); 
+						}
+
+					}
+				}
+			}
+		}
 
 
-        StaticJsonBuffer<200> jsonBuffer;
-        JsonObject& json = jsonBuffer.createObject();
-        adapterChain->saveAll(&json);
+		StaticJsonBuffer<200> jsonBuffer;
+		JsonObject& json = jsonBuffer.createObject();
+		adapterChain->saveAll(&json);
 
 
-        if (connected) {
-            if (config.mnjson) {
-                for (JsonObject::iterator it=json.begin(); it!=json.end(); ++it)  {
-                    client.publish((prefix + "/" + it->key).c_str(), it->value.as<String>().c_str());
-                    Serial.println(prefix + "/" + it->key);
-                }
-            } else {
-                char buffer[json.measureLength() + 1];
-                json.printTo(buffer, sizeof(buffer));
-                client.publish((prefix + "/data").c_str(), buffer);
-                Serial.println(prefix + "/data");
-            }
-        }
+		if (connected) {
+			if (config.mnjson) {
+				for (JsonObject::iterator it=json.begin(); it!=json.end(); ++it)  {
+					client.publish((prefix + "/" + it->key).c_str(), it->value.as<String>().c_str());
+					Serial.println(prefix + "/" + it->key);
+				}
+			} else {
+				char buffer[json.measureLength() + 1];
+				json.printTo(buffer, sizeof(buffer));
+				client.publish((prefix + "/data").c_str(), buffer);
+				Serial.println(prefix + "/data");
+			}
+		}
 
-        if (!connected || config.debug){
-            json.printTo(Serial);
-            Serial.println();
-        }
-
-
-    }
+		if (!connected || config.debug){
+			json.printTo(Serial);
+			Serial.println();
+		}
 
 
-    client.loop();
-    TaskScheduler::wait(10);
+	}
 
-    if (readConfigurationFromSerial())
-    {
-        Serial.println("Resetting to update configuration");
-        systemRestart();
-    }
+
+	client.loop();
+	TaskScheduler::wait(5);
+
+	if (readConfigurationFromSerial())
+	{
+		Serial.println("Resetting to update configuration");
+		Utils::systemRestart();
+	}
 }

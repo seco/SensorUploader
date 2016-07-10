@@ -1,5 +1,5 @@
-#ifndef _DHTADAPTER_H_INCLUDED
-#define _DHTADAPTER_H_INCLUDED
+#ifndef _DHTADAPTER_H_
+#define _DHTADAPTER_H_
 
 #include <ArduinoJson.h>
 #include <DHT.h>
