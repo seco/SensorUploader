@@ -45,7 +45,7 @@ String prefix;
 
 
 
-bool readConfigurationFromSerial()//TODO: this works really non-stable, sometimes part of the data missing - sometimes data itself completely missing, so really need to rewrite, also to output JSON also
+bool readConfigurationFromSerial()//TODO: this works really unstable, sometimes part of the data missing so really need to rewrite, also to output JSON also
 {
 	String bufc;
 
