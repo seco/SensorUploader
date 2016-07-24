@@ -576,7 +576,6 @@ void loop()
 		JsonObject& json = jsonBuffer.createObject();
 		adapterChain->saveAll(&json);
 
-
 		if (connected) 
 		{
 			if (config.mnjson) 
