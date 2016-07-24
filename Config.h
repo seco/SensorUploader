@@ -1,5 +1,5 @@
-#ifndef _CONFIG_H_INCLUDED
-#define _CONFIG_H_INCLUDED
+#ifndef _CONFIG_H_
+#define _CONFIG_H_
 
 typedef struct Config
 {
@@ -20,21 +20,8 @@ typedef struct Config
     char mfingerprint[129];
     bool mignfingerprint;
 
-    char mswitchtopic[65];
-    char mswitchmsgon[65];
-
-
-    char mstatustopic[65];
-    char mstatusmsg[65];
-
-    char mswitchmsgoff[65];
-
     bool debug;
 
-    char mupdatetopic[65];
-
-
-    
 } Config_t;
 
 

@@ -1,5 +1,5 @@
-#ifndef _RELAYADAPTER_H_INCLUDED
-#define _RELAYADAPTER_H_INCLUDED
+#ifndef _RELAYADAPTER_H
+#define _RELAYADAPTER_H
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
